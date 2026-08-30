@@ -126,6 +126,7 @@ createRoot(document.getElementById("root")!).render(
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
           <RouteSyncer />
+          <OnboardingProviderWrapper>
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Landing />} />
@@ -138,21 +139,20 @@ createRoot(document.getElementById("root")!).render(
                 path="/dashboard"
                 element={
                   <RequireAuth>
-                    <OnboardingProviderWrapper>
-                      <Dashboard />
-                    </OnboardingProviderWrapper>
+                    <Dashboard />
                   </RequireAuth>
                 }
               />
-              <Route path="/advisor" element={<OnboardingProviderWrapper><Advisor /></OnboardingProviderWrapper>} />
-              <Route path="/what-if" element={<OnboardingProviderWrapper><WhatIf /></OnboardingProviderWrapper>} />
-              <Route path="/compare" element={<OnboardingProviderWrapper><Compare /></OnboardingProviderWrapper>} />
-              <Route path="/report" element={<OnboardingProviderWrapper><Report /></OnboardingProviderWrapper>} />
+              <Route path="/advisor" element={<Advisor />} />
+              <Route path="/what-if" element={<WhatIf />} />
+              <Route path="/compare" element={<Compare />} />
+              <Route path="/report" element={<Report />} />
               <Route path="/saved" element={<Placeholder type="saved" />} />
               <Route path="/settings" element={<Placeholder type="settings" />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          </OnboardingProviderWrapper>
         </BrowserRouter>
         <Toaster />
       </ConvexAuthProvider>

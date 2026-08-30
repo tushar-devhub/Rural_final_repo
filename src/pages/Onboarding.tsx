@@ -3,10 +3,7 @@ import { useNavigate } from "react-router";
 import { Navbar } from "@/components/Navbar";
 import { ProgressStepper } from "@/components/ui/ProgressStepper";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
-import {
-  OnboardingProvider,
-  useOnboarding,
-} from "@/lib/onboarding-context";
+import { useOnboarding } from "@/lib/onboarding-context";
 import { generateFeasibility } from "@/data/feasibility";
 import {
   locations,
@@ -710,9 +707,5 @@ function AnalysisLoader() {
 
 /* ─── Export ─── */
 export default function OnboardingPage() {
-  return (
-    <OnboardingProvider>
-      <OnboardingInner />
-    </OnboardingProvider>
-  );
+  return <OnboardingInner />;
 }
