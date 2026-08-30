@@ -5,15 +5,18 @@ import type { AIMessage } from "@/services/aiService";
 import { getAIResponse } from "@/services/aiService";
 import {
   isSpeechRecognitionSupported,
+  isSpeechSynthesisSupported,
+  requestMicPermission,
   startListening,
   stopListening,
   speakHindi,
   stopSpeaking,
-  type VoiceState,
+  startAudioAnalyzer,
+  stopAudioAnalyzer,
 } from "@/services/voiceService";
 import {
   Mic, MicOff, X, Send, Volume2, VolumeX, Copy,
-  Bot, User, AlertCircle, RotateCcw,
+  Bot, User, AlertCircle, RotateCcw, Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,36 +32,48 @@ interface ChatMessage {
   isVoice?: boolean;
 }
 
+type AppState = "idle" | "listening" | "confirming" | "thinking" | "speaking" | "error" | "permission_required";
+
 export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
-  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [voiceSupported] = useState(isSpeechRecognitionSupported());
+  const [appState, setAppState] = useState<AppState>("idle");
+  const [interimText, setInterimText] = useState("");
+  const [finalTranscript, setFinalTranscript] = useState("");
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [micVolume, setMicVolume] = useState(0);
+  const [lastResponseText, setLastResponseText] = useState("");
   const [showWelcome, setShowWelcome] = useState(true);
 
   const { location, business, capital, feasibility } = useOnboarding();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
 
   const quickPrompts = getQuickPrompts(currentPage);
 
-  // Auto-scroll to latest message
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, appState]);
 
   // Focus input when panel opens
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 300);
-    }
+    if (isOpen) setTimeout(() => inputRef.current?.focus(), 300);
   }, [isOpen]);
 
-  // Build context for AI
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopListening();
+      stopSpeaking();
+      stopAudioAnalyzer();
+    };
+  }, []);
+
   const getContext = useCallback(() => {
     return buildContext({
       location: location ?? null,
@@ -69,10 +84,12 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
     });
   }, [location, business, capital, feasibility, currentPage]);
 
-  // Send message to AI
+  // ─── Send message to AI ───
   const sendMessage = useCallback(async (text: string, isVoice = false) => {
-    if (!text.trim()) return;
+    if (!text.trim() || appState === "thinking") return;
     setError(null);
+    setInterimText("");
+    setFinalTranscript("");
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
@@ -83,75 +100,154 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
     };
     setMessages((prev) => [...prev, userMsg]);
     setInputText("");
-    setVoiceState("thinking");
+    setAppState("thinking");
 
     const systemMsg: AIMessage = { role: "system", content: SYSTEM_PROMPT + getContext() };
-    const history: AIMessage[] = messages.slice(-8).map((m) => ({
+    const history: AIMessage[] = messagesRef.current.slice(-10).map((m) => ({
       role: m.role as "user" | "assistant",
       content: m.text,
     }));
 
-    const response = await getAIResponse([
-      systemMsg,
-      ...history,
-      { role: "user", content: text.trim() },
-    ]);
+    try {
+      const response = await getAIResponse([
+        systemMsg,
+        ...history,
+        { role: "user", content: text.trim() },
+      ]);
 
-    const assistantMsg: ChatMessage = {
-      id: `a-${Date.now()}`,
-      role: "assistant",
-      text: response.text,
-      timestamp: Date.now(),
-    };
-    setMessages((prev) => [...prev, assistantMsg]);
-    setVoiceState("idle");
-    setShowWelcome(false);
+      const assistantMsg: ChatMessage = {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        text: response.text,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+      setLastResponseText(response.text);
+      setShowWelcome(false);
 
-    // Speak response if TTS enabled
-    if (ttsEnabled && voiceState !== "error") {
-      setVoiceState("speaking");
-      speakHindi(
-        response.text.replace(/[।\n]/g, ". "),
-        () => setVoiceState("idle"),
-        () => setVoiceState("idle"),
-      );
+      // Speak response
+      if (ttsEnabled) {
+        setAppState("speaking");
+        speakHindi(
+          response.text.replace(/[।\n]+/g, ". "),
+          () => setAppState("idle"),
+          (err) => {
+            setError(err);
+            setAppState("error");
+          },
+        );
+      } else {
+        setAppState("idle");
+      }
+    } catch {
+      setError("जवाब तैयार नहीं हो पाया। कृपया दोबारा कोशिश करें।");
+      setAppState("error");
     }
-  }, [messages, getContext, ttsEnabled, voiceState]);
+  }, [appState, getContext, ttsEnabled]);
 
-  // Start voice listening
-  const handleVoiceStart = useCallback(() => {
+  // ─── Voice input ───
+  const handleVoiceStart = useCallback(async () => {
     setError(null);
+    setInterimText("");
+    setFinalTranscript("");
     stopSpeaking();
-    setVoiceState("listening");
+
+    // Check mic permission first
+    const perm = await requestMicPermission();
+    if (!perm.granted) {
+      setError(perm.error || "Microphone permission required.");
+      setAppState("permission_required");
+      return;
+    }
+
+    setAppState("listening");
+
+    // Start real audio visualizer
+    startAudioAnalyzer((vol) => setMicVolume(vol));
+
     startListening(
       (text, isFinal) => {
         if (isFinal) {
-          setVoiceState("thinking");
-          sendMessage(text, true);
+          setFinalTranscript(text);
+          setInterimText("");
+          stopAudioAnalyzer();
+          setMicVolume(0);
+          // Show confirmation step
+          setAppState("confirming");
+        } else {
+          setInterimText(text);
         }
       },
       (err) => {
+        stopAudioAnalyzer();
+        setMicVolume(0);
         setError(err);
-        setVoiceState("error");
+        setAppState("error");
       },
       () => {
-        if (voiceState === "listening") setVoiceState("idle");
+        // onEnd — recognition stopped naturally
+        stopAudioAnalyzer();
+        setMicVolume(0);
+        // If we have a final transcript, we're in confirming state
+        // If not, user just stopped without speaking
+        setAppState((prev) => {
+          if (prev === "listening") return "idle";
+          return prev;
+        });
+      },
+      () => {
+        // onStarted — mic is live
       },
     );
-  }, [sendMessage, voiceState]);
+  }, []);
 
   const handleVoiceStop = useCallback(() => {
     stopListening();
-    setVoiceState("idle");
+    stopAudioAnalyzer();
+    setMicVolume(0);
+    // onEnd callback will handle state transition
   }, []);
+
+  const handleConfirmTranscript = useCallback(() => {
+    if (finalTranscript) {
+      sendMessage(finalTranscript, true);
+    }
+  }, [finalTranscript, sendMessage]);
+
+  const handleRetryVoice = useCallback(() => {
+    setError(null);
+    setFinalTranscript("");
+    setInterimText("");
+    handleVoiceStart();
+  }, [handleVoiceStart]);
 
   const handleStopSpeaking = useCallback(() => {
     stopSpeaking();
-    setVoiceState("idle");
+    setAppState("idle");
   }, []);
 
-  const handleCopy = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleReplay = useCallback(() => {
+    if (lastResponseText) {
+      stopSpeaking();
+      setAppState("speaking");
+      speakHindi(
+        lastResponseText.replace(/[।\n]+/g, ". "),
+        () => setAppState("idle"),
+        (err) => { setError(err); setAppState("error"); },
+      );
+    }
+  }, [lastResponseText]);
+
+  const handleClose = useCallback(() => {
+    stopListening();
+    stopSpeaking();
+    stopAudioAnalyzer();
+    setMicVolume(0);
+    setIsOpen(false);
+    setAppState("idle");
+    setInterimText("");
+    setFinalTranscript("");
+    setError(null);
   }, []);
 
   return (
@@ -172,30 +268,26 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
       {/* Conversation Panel */}
       {isOpen && (
         <>
-          {/* Backdrop on mobile */}
-          <div
-            className="fixed inset-0 bg-black/30 z-40 sm:hidden"
-            onClick={() => setIsOpen(false)}
-          />
-
-          <div
-            ref={panelRef}
-            className={cn(
-              "fixed z-50 bg-white border border-border shadow-2xl flex flex-col animate-slide-up",
-              // Mobile: full screen
-              "inset-0 sm:inset-auto sm:bottom-6 sm:right-6 sm:w-[420px] sm:h-[600px] sm:rounded-2xl",
-            )}
-          >
+          <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={handleClose} />
+          <div className="fixed z-50 bg-white border border-border shadow-2xl flex flex-col animate-slide-up inset-0 sm:inset-auto sm:bottom-6 sm:right-6 sm:w-[420px] sm:h-[600px] sm:rounded-2xl">
             {/* Header */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-white rounded-t-2xl sm:rounded-t-2xl">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-white sm:rounded-t-2xl">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
                 <Bot className="h-5 w-5 text-primary" />
               </div>
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-foreground font-serif-display">RuralBiz AI Advisor</h3>
-                <p className="text-[11px] text-muted-foreground">आपका Business Advisor • हिंदी</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <p className="text-[11px] text-muted-foreground">
+                    {appState === "listening" ? "सुन रहा हूँ..." :
+                     appState === "thinking" ? "समझ रहा हूँ..." :
+                     appState === "speaking" ? "जवाब दे रहा हूँ..." :
+                     "Online • हिंदी"}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => setTtsEnabled(!ttsEnabled)}
                   className="p-2 rounded-lg hover:bg-muted transition-colors"
@@ -203,16 +295,13 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
                 >
                   {ttsEnabled ? <Volume2 className="h-4 w-4 text-muted-foreground" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
                 </button>
-                <button
-                  onClick={() => { stopSpeaking(); stopListening(); setIsOpen(false); setVoiceState("idle"); }}
-                  className="p-2 rounded-lg hover:bg-muted transition-colors"
-                >
+                <button onClick={handleClose} className="p-2 rounded-lg hover:bg-muted transition-colors">
                   <X className="h-4 w-4 text-muted-foreground" />
                 </button>
               </div>
             </div>
 
-            {/* Messages Area */}
+            {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
               {/* Welcome */}
               {showWelcome && messages.length === 0 && (
@@ -222,7 +311,7 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
                   </div>
                   <p className="text-sm font-bold text-foreground mb-1">नमस्ते! 🙏</p>
                   <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                    मैं RuralBiz AI हूँ। मैं आपके business analysis को समझ चुका हूँ। आप मुझसे अपने business, market, competition या finance से जुड़ा कोई भी सवाल पूछ सकते हैं।
+                    मैं RuralBiz AI हूँ। मैं आपके business analysis को समझ चुका हूँ। बोलकर या लिखकर कोई भी सवाल पूछ सकते हैं।
                   </p>
                   {feasibility && (
                     <div className="mt-3 inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1.5">
@@ -232,15 +321,24 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
                       </span>
                     </div>
                   )}
+                  {/* Big mic button */}
+                  <button
+                    onClick={handleVoiceStart}
+                    disabled={appState === "thinking"}
+                    className="mt-5 mx-auto flex flex-col items-center gap-2"
+                  >
+                    <div className="h-16 w-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/20 hover:shadow-xl transition-all hover:scale-105">
+                      <Mic className="h-7 w-7" />
+                    </div>
+                    <span className="text-xs font-medium text-primary">बोलकर पूछें</span>
+                  </button>
+                  <p className="text-[10px] text-muted-foreground mt-2">या अपना सवाल नीचे लिखें</p>
                 </div>
               )}
 
-              {/* Chat Messages */}
+              {/* Messages */}
               {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={cn("flex gap-2 animate-fade-in", msg.role === "user" ? "justify-end" : "justify-start")}
-                >
+                <div key={msg.id} className={cn("flex gap-2 animate-fade-in", msg.role === "user" ? "justify-end" : "justify-start")}>
                   {msg.role === "assistant" && (
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0 mt-0.5">
                       <Bot className="h-3.5 w-3.5 text-primary" />
@@ -248,17 +346,15 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
                   )}
                   <div className={cn(
                     "max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-muted text-foreground rounded-bl-md",
+                    msg.role === "user" ? "bg-primary text-primary-foreground rounded-br-md" : "bg-muted text-foreground rounded-bl-md",
                   )}>
                     <p className="whitespace-pre-wrap">{msg.text}</p>
                     {msg.role === "assistant" && (
                       <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-border/30">
-                        <button onClick={() => speakHindi(msg.text.replace(/[।\n]/g, ". "), () => setVoiceState("idle"), () => setVoiceState("idle"))} className="p-1 rounded hover:bg-background/50 transition-colors" title="सुनें">
+                        <button onClick={handleReplay} className="p-1 rounded hover:bg-background/50 transition-colors" title="फिर सुनें">
                           <Volume2 className="h-3 w-3" />
                         </button>
-                        <button onClick={() => handleCopy(msg.text)} className="p-1 rounded hover:bg-background/50 transition-colors" title="Copy">
+                        <button onClick={() => navigator.clipboard.writeText(msg.text)} className="p-1 rounded hover:bg-background/50 transition-colors" title="Copy">
                           <Copy className="h-3 w-3" />
                         </button>
                       </div>
@@ -272,8 +368,41 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
                 </div>
               ))}
 
-              {/* Thinking indicator */}
-              {voiceState === "thinking" && (
+              {/* Live transcription while listening */}
+              {appState === "listening" && interimText && (
+                <div className="flex gap-2 animate-fade-in justify-end">
+                  <div className="max-w-[80%] rounded-2xl rounded-br-md px-3.5 py-2.5 text-sm bg-primary/20 text-foreground border border-primary/20 border-dashed">
+                    <p className="whitespace-pre-wrap italic">{interimText}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmation step */}
+              {appState === "confirming" && finalTranscript && (
+                <div className="animate-fade-in">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">क्या आपने कहा:</p>
+                    <p className="text-sm font-medium text-foreground mb-2.5">"{finalTranscript}"</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleConfirmTranscript}
+                        className="flex-1 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-semibold hover:bg-primary/90 transition-colors"
+                      >
+                        हाँ, पूछें ✓
+                      </button>
+                      <button
+                        onClick={handleRetryVoice}
+                        className="flex-1 rounded-lg bg-white border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
+                      >
+                        फिर बोलें
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Thinking */}
+              {appState === "thinking" && (
                 <div className="flex gap-2 animate-fade-in">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
                     <Bot className="h-3.5 w-3.5 text-primary" />
@@ -294,9 +423,14 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
                   <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-xs text-red-700">{error}</p>
-                    <button onClick={() => { setError(null); handleVoiceStart(); }} className="text-xs font-semibold text-red-600 mt-1 hover:underline">
-                      दोबारा बोलें →
-                    </button>
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={handleRetryVoice} className="text-[11px] font-semibold text-red-600 hover:underline">
+                        दोबारा बोलें →
+                      </button>
+                      <button onClick={() => setError(null)} className="text-[11px] font-semibold text-muted-foreground hover:underline">
+                        लिखकर पूछें
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -304,8 +438,8 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Prompts */}
-            {messages.length < 3 && (
+            {/* Quick Prompts — always visible */}
+            {messages.length < 4 && appState === "idle" && (
               <div className="px-4 py-2 border-t border-border/50">
                 <div className="flex flex-wrap gap-1.5">
                   {quickPrompts.map((p) => (
@@ -321,34 +455,35 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
               </div>
             )}
 
-            {/* Voice State Indicator */}
-            {voiceState === "listening" && (
-              <div className="px-4 py-2 bg-primary/5 border-t border-primary/10">
-                <div className="flex items-center justify-center gap-2">
-                  <div className="flex gap-0.5">
-                    {[...Array(5)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-1 bg-primary rounded-full animate-pulse"
-                        style={{
-                          height: `${8 + Math.random() * 12}px`,
-                          animationDelay: `${i * 100}ms`,
-                          animationDuration: "0.5s",
-                        }}
-                      />
-                    ))}
+            {/* Listening indicator with real waveform */}
+            {appState === "listening" && (
+              <div className="px-4 py-2.5 bg-primary/5 border-t border-primary/10">
+                <div className="flex items-center justify-center gap-3">
+                  {/* Real audio waveform bars */}
+                  <div className="flex items-end gap-[3px] h-6">
+                    {[...Array(7)].map((_, i) => {
+                      const height = 4 + micVolume * 20 * (0.5 + 0.5 * Math.sin(Date.now() / 200 + i));
+                      return (
+                        <div
+                          key={i}
+                          className="w-[3px] bg-primary rounded-full transition-all duration-100"
+                          style={{ height: `${Math.max(4, height)}px` }}
+                        />
+                      );
+                    })}
                   </div>
                   <span className="text-xs font-medium text-primary">सुन रहा हूँ...</span>
                 </div>
               </div>
             )}
 
-            {voiceState === "speaking" && (
-              <div className="px-4 py-2 bg-emerald-50 border-t border-emerald-100">
-                <div className="flex items-center justify-center gap-2">
+            {/* Speaking indicator */}
+            {appState === "speaking" && (
+              <div className="px-4 py-2.5 bg-emerald-50 border-t border-emerald-100">
+                <div className="flex items-center justify-center gap-3">
                   <Volume2 className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
                   <span className="text-xs font-medium text-emerald-700">जवाब दे रहा हूँ...</span>
-                  <button onClick={handleStopSpeaking} className="text-[10px] font-semibold text-emerald-600 underline ml-1">
+                  <button onClick={handleStopSpeaking} className="text-[10px] font-semibold text-emerald-600 underline">
                     रोकें
                   </button>
                 </div>
@@ -356,7 +491,7 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
             )}
 
             {/* Input Area */}
-            <div className="px-3 py-3 border-t border-border bg-white rounded-b-2xl">
+            <div className="px-3 py-3 border-t border-border bg-white sm:rounded-b-2xl">
               <div className="flex items-center gap-2">
                 <input
                   ref={inputRef}
@@ -371,53 +506,62 @@ export function VoiceAssistant({ currentPage }: VoiceAssistantProps) {
                   }}
                   placeholder="अपना सवाल लिखें..."
                   className="flex-1 rounded-xl border border-border bg-muted/50 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all"
-                  disabled={voiceState === "thinking"}
+                  disabled={appState === "thinking" || appState === "confirming"}
                 />
 
-                {/* Send text */}
-                {inputText.trim() && (
+                {inputText.trim() ? (
                   <button
                     onClick={() => sendMessage(inputText)}
-                    disabled={voiceState === "thinking"}
-                    className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors"
+                    disabled={appState === "thinking" || appState === "confirming"}
+                    className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
                     <Send className="h-4 w-4" />
                   </button>
-                )}
-
-                {/* Microphone button */}
-                {!inputText.trim() && (
+                ) : appState === "speaking" ? (
                   <button
-                    onClick={voiceState === "listening" ? handleVoiceStop : handleVoiceStart}
-                    disabled={!voiceSupported || voiceState === "thinking"}
-                    className={cn(
-                      "h-10 w-10 rounded-xl flex items-center justify-center transition-all",
-                      voiceState === "listening"
-                        ? "bg-red-500 text-white animate-pulse"
-                        : "bg-primary text-primary-foreground hover:bg-primary/90",
-                      (!voiceSupported || voiceState === "thinking") && "opacity-50 cursor-not-allowed",
-                    )}
-                    title={voiceSupported ? "बोलें" : "Voice not supported"}
+                    onClick={handleStopSpeaking}
+                    className="h-10 w-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 transition-colors"
+                    aria-label="Stop AI response"
                   >
-                    {voiceState === "listening" ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    <VolumeX className="h-4 w-4" />
                   </button>
-                )}
-
-                {/* Retry on error */}
-                {voiceState === "error" && !inputText.trim() && (
+                ) : appState === "listening" ? (
+                  <button
+                    onClick={handleVoiceStop}
+                    className="h-10 w-10 rounded-xl bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors animate-pulse"
+                    aria-label="Stop listening"
+                  >
+                    <MicOff className="h-4 w-4" />
+                  </button>
+                ) : appState === "confirming" ? (
+                  <button
+                    onClick={handleConfirmTranscript}
+                    className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors"
+                    aria-label="Send confirmed message"
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                ) : (
                   <button
                     onClick={handleVoiceStart}
-                    className="h-10 w-10 rounded-xl bg-muted text-muted-foreground flex items-center justify-center hover:bg-muted/80 transition-colors"
+                    disabled={appState === "thinking"}
+                    className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    aria-label="Start voice input"
                   >
-                    <RotateCcw className="h-4 w-4" />
+                    <Mic className="h-4 w-4" />
                   </button>
                 )}
               </div>
 
-              {!voiceSupported && (
-                <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-                  Voice not available — type your question
-                </p>
+              {/* Replay last response */}
+              {lastResponseText && appState === "idle" && messages.length > 0 && (
+                <button
+                  onClick={handleReplay}
+                  className="w-full mt-2 flex items-center justify-center gap-1.5 text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Play className="h-3 w-3" />
+                  फिर सुनें
+                </button>
               )}
             </div>
           </div>
