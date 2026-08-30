@@ -16,6 +16,10 @@ const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Onboarding = lazy(() => import("./pages/Onboarding.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const Placeholder = lazy(() => import("./pages/Placeholder.tsx"));
+const Advisor = lazy(() => import("./pages/Advisor.tsx"));
+const WhatIf = lazy(() => import("./pages/WhatIf.tsx"));
+const Compare = lazy(() => import("./pages/Compare.tsx"));
+const Report = lazy(() => import("./pages/Report.tsx"));
 
 // Loading fallback
 function RouteLoading() {
@@ -82,6 +86,12 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
+import { OnboardingProvider } from "./lib/onboarding-context";
+
+function OnboardingProviderWrapper({ children }: { children: React.ReactNode }) {
+  return <OnboardingProvider>{children}</OnboardingProvider>;
+}
+
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 function RouteSyncer() {
@@ -128,12 +138,16 @@ createRoot(document.getElementById("root")!).render(
                 path="/dashboard"
                 element={
                   <RequireAuth>
-                    <Dashboard />
+                    <OnboardingProviderWrapper>
+                      <Dashboard />
+                    </OnboardingProviderWrapper>
                   </RequireAuth>
                 }
               />
-              <Route path="/advisor" element={<Placeholder type="advisor" />} />
-              <Route path="/report" element={<Placeholder type="report" />} />
+              <Route path="/advisor" element={<OnboardingProviderWrapper><Advisor /></OnboardingProviderWrapper>} />
+              <Route path="/what-if" element={<OnboardingProviderWrapper><WhatIf /></OnboardingProviderWrapper>} />
+              <Route path="/compare" element={<OnboardingProviderWrapper><Compare /></OnboardingProviderWrapper>} />
+              <Route path="/report" element={<OnboardingProviderWrapper><Report /></OnboardingProviderWrapper>} />
               <Route path="/saved" element={<Placeholder type="saved" />} />
               <Route path="/settings" element={<Placeholder type="settings" />} />
               <Route path="*" element={<NotFound />} />

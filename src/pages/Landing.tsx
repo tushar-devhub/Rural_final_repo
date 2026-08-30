@@ -1,5 +1,7 @@
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { demoScenarios } from "@/data/demos";
+import { cn } from "@/lib/utils";
 import {
   MapPin,
   Store,
@@ -14,6 +16,12 @@ import {
   ArrowUpRight,
   Check,
   ChevronRight,
+  Play,
+  Sparkles,
+  BrainCircuit,
+  Zap,
+  GitCompareArrows,
+  FileText,
 } from "lucide-react";
 import { Link } from "react-router";
 
@@ -408,6 +416,106 @@ function TrustSection() {
   );
 }
 
+/* ─── What's Inside (Phase 3 features) ─── */
+function WhatsInside() {
+  const features = [
+    {
+      icon: <BrainCircuit className="h-5 w-5" />,
+      title: "AI Business Advisor",
+      desc: "Ask context-aware questions about your assessment. The AI understands your location, business, capital and all analysis results.",
+    },
+    {
+      icon: <Sparkles className="h-5 w-5" />,
+      title: "What-If Simulator",
+      desc: "Change your capital, business type or location and instantly see how the analysis changes. Compare scenarios side by side.",
+    },
+    {
+      icon: <GitCompareArrows className="h-5 w-5" />,
+      title: "Business Comparison",
+      desc: "Compare 2–3 business ideas across market reach, competition, risk and financial fit to find your best option.",
+    },
+    {
+      icon: <FileText className="h-5 w-5" />,
+      title: "Business Decision Report",
+      desc: "A professional report with all your analysis, financial structure and action plan — ready to share with bank officers or partners.",
+    },
+  ];
+
+  return (
+    <section className="py-16 sm:py-24 bg-white">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">
+            Beyond Feasibility
+          </p>
+          <h2 className="text-3xl sm:text-4xl font-bold">
+            Everything You Need to <span className="italic text-primary">Decide</span>
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {features.map((f) => (
+            <div key={f.title} className="rounded-2xl border border-border/60 bg-[#F4F8EF] p-5">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-3">
+                {f.icon}
+              </div>
+              <h3 className="text-sm font-bold text-foreground mb-1.5">{f.title}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Demo Mode ─── */
+function DemoMode() {
+  const verdictColors = {
+    good: "text-emerald-600 bg-emerald-50",
+    caution: "text-amber-600 bg-amber-50",
+    rethink: "text-red-600 bg-red-50",
+  };
+
+  return (
+    <section className="py-16 sm:py-24 bg-[#F4F8EF]">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">
+            Try It Now
+          </p>
+          <h2 className="text-3xl sm:text-4xl font-bold">
+            Demo <span className="italic text-primary">Scenarios</span>
+          </h2>
+          <p className="mt-3 text-muted-foreground text-sm sm:text-base">
+            Explore preset scenarios to see how RuralBiz AI works. Each demonstrates a different aspect of the analysis.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {demoScenarios.map((demo) => (
+            <Link
+              key={demo.id}
+              to="/onboarding"
+              className="rounded-2xl border border-border/60 bg-white p-5 hover:shadow-lg hover:shadow-black/5 transition-all group"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl">{demo.icon}</span>
+                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", verdictColors[demo.verdict])}>
+                  {demo.verdict === "good" ? "🟢 GOOD" : demo.verdict === "caution" ? "🟡 CAUTION" : "🔴 RETHINK"}
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-foreground mb-1">{demo.title}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed mb-3">{demo.description}</p>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-primary group-hover:gap-2.5 transition-all">
+                <Play className="h-3 w-3" /> Try Demo
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── Final CTA ─── */
 function FinalCTA() {
   return (
@@ -424,15 +532,23 @@ function FinalCTA() {
               much you can invest — and we will help you understand whether this is
               a sensible business decision. It takes less than 3 minutes.
             </p>
-            <Link
-              to="/onboarding"
-              className="inline-flex items-center gap-2.5 rounded-full bg-white px-8 py-4 text-sm font-bold text-primary hover:bg-white/90 transition-all shadow-lg"
-            >
-              Check My Business Idea
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[11px]">
-                →
-              </span>
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link
+                to="/onboarding"
+                className="inline-flex items-center gap-2.5 rounded-full bg-white px-8 py-4 text-sm font-bold text-primary hover:bg-white/90 transition-all shadow-lg"
+              >
+                Check My Business Idea
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[11px]">
+                  →
+                </span>
+              </Link>
+              <Link
+                to="/onboarding"
+                className="inline-flex items-center gap-2 rounded-full border border-white/30 px-6 py-3.5 text-sm font-semibold text-primary-foreground/80 hover:bg-white/10 transition-colors"
+              >
+                <Play className="h-4 w-4" /> Try Demo
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -450,7 +566,9 @@ export default function Landing() {
         <HowItWorks />
         <WhatWeAnalyze />
         <FinancialPlanning />
+        <WhatsInside />
         <TrustSection />
+        <DemoMode />
         <FinalCTA />
       </main>
       <Footer />

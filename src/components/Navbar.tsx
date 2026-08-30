@@ -34,7 +34,7 @@ export function Navbar({ className, variant = "landing" }: NavbarProps) {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-1">
-          {isLanding && (
+          {isLanding ? (
             <>
               <a href="#how-it-works" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                 How It Works
@@ -45,6 +45,24 @@ export function Navbar({ className, variant = "landing" }: NavbarProps) {
               <a href="#trust" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                 Trust
               </a>
+            </>
+          ) : (
+            <>
+              <Link to="/dashboard" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Dashboard
+              </Link>
+              <Link to="/advisor" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                AI Advisor
+              </Link>
+              <Link to="/what-if" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                What-If
+              </Link>
+              <Link to="/compare" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Compare
+              </Link>
+              <Link to="/report" className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Report
+              </Link>
             </>
           )}
           <Link
@@ -71,7 +89,7 @@ export function Navbar({ className, variant = "landing" }: NavbarProps) {
       {/* Mobile menu */}
       {mobileOpen && (
         <div className="md:hidden border-t border-border/50 bg-white px-4 pb-4">
-          {isLanding && (
+          {isLanding ? (
             <div className="flex flex-col gap-1 py-2">
               <a href="#how-it-works" className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors" onClick={() => setMobileOpen(false)}>
                 How It Works
@@ -82,6 +100,24 @@ export function Navbar({ className, variant = "landing" }: NavbarProps) {
               <a href="#trust" className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors" onClick={() => setMobileOpen(false)}>
                 Trust
               </a>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1 py-2">
+              <Link to="/dashboard" className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors" onClick={() => setMobileOpen(false)}>
+                Dashboard
+              </Link>
+              <Link to="/advisor" className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors" onClick={() => setMobileOpen(false)}>
+                AI Advisor
+              </Link>
+              <Link to="/what-if" className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors" onClick={() => setMobileOpen(false)}>
+                What-If Simulator
+              </Link>
+              <Link to="/compare" className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors" onClick={() => setMobileOpen(false)}>
+                Compare Businesses
+              </Link>
+              <Link to="/report" className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors" onClick={() => setMobileOpen(false)}>
+                Business Report
+              </Link>
             </div>
           )}
           <Link

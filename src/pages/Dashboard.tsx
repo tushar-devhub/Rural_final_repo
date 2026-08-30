@@ -535,17 +535,35 @@ export default function Dashboard() {
         {/* CTA */}
         <div className="mt-8 mb-12 flex flex-col sm:flex-row items-center justify-center gap-3">
           <Link
-            to="/onboarding"
+            to="/advisor"
             className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            Run Another Assessment
+            Ask AI Advisor
             <ArrowUpRight className="h-4 w-4" />
           </Link>
           <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-full border border-border px-6 py-3 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+            to="/what-if"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-6 py-3 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
           >
-            Back to Home
+            Try What-If
+          </Link>
+          <Link
+            to="/compare"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-6 py-3 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+          >
+            Compare Businesses
+          </Link>
+          <Link
+            to="/report"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-6 py-3 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+          >
+            View Report
+          </Link>
+          <Link
+            to="/onboarding"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-6 py-3 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+          >
+            New Assessment
           </Link>
         </div>
       </main>
