@@ -28,7 +28,7 @@ export function Navbar({ className, variant = "landing" }: NavbarProps) {
             <Globe className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="text-xl font-bold text-foreground font-sans-body tracking-tight">
-            Vi<span className="text-primary">Business</span>
+            Rural<span className="text-primary">Biz AI</span>
           </span>
         </Link>
 
@@ -51,7 +51,7 @@ export function Navbar({ className, variant = "landing" }: NavbarProps) {
             to="/onboarding"
             className="ml-2 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            Check My Business
+            Analyze My Business
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px]">
               →
             </span>
@@ -89,7 +89,7 @@ export function Navbar({ className, variant = "landing" }: NavbarProps) {
             className="mt-2 flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
             onClick={() => setMobileOpen(false)}
           >
-            Check My Business →
+            Analyze My Business →
           </Link>
         </div>
       )}

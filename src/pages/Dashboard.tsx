@@ -40,7 +40,7 @@ export default function Dashboard() {
             </div>
             <h2 className="text-xl font-bold text-foreground mb-2">No Analysis Found</h2>
             <p className="text-sm text-muted-foreground mb-6">
-              You haven't run an assessment yet. Start by telling us about your business idea.
+              You haven't run an assessment yet. Tell us about your business idea and we will analyze it for you.
             </p>
             <Link
               to="/onboarding"

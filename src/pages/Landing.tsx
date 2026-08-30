@@ -38,7 +38,8 @@ function Hero() {
 
           <p className="mt-5 text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto">
             Understand your local market, competition, risks and financing options
-            before you invest your hard-earned money.
+            before you invest your hard-earned money. Built for rural and semi-urban
+            entrepreneurs who deserve clarity, not guesswork.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -152,30 +153,26 @@ function HowItWorks() {
   const steps = [
     {
       num: "01",
-      title: "Choose Location",
-      titleHi: "स्थान चुनें",
-      desc: "Select your village, town or block where you want to start your business.",
+      title: "Choose Your Location",
+      desc: "Select your village, town or block where you plan to start your business.",
       icon: <MapPin className="h-5 w-5" />,
     },
     {
       num: "02",
       title: "Tell Us Your Business",
-      titleHi: "अपना व्यवसाय बताएं",
-      desc: "Choose from 12+ business categories or tell us your unique idea.",
+      desc: "Choose from 12+ business categories or describe your own idea.",
       icon: <Store className="h-5 w-5" />,
     },
     {
       num: "03",
       title: "Enter Your Capital",
-      titleHi: "अपनी पूंजी दर्ज करें",
-      desc: "Tell us how much you can contribute from your own savings.",
+      desc: "Share how much you can contribute from your own savings.",
       icon: <IndianRupee className="h-5 w-5" />,
     },
     {
       num: "04",
       title: "Get Your Decision",
-      titleHi: "अपना निर्णय प्राप्त करें",
-      desc: "Receive a complete feasibility analysis with clear recommendations.",
+      desc: "Receive a complete feasibility analysis with a clear recommendation.",
       icon: <BarChart3 className="h-5 w-5" />,
     },
   ];
@@ -190,6 +187,9 @@ function HowItWorks() {
           <h2 className="text-3xl sm:text-4xl font-bold">
             How It <span className="italic text-primary">Works</span>
           </h2>
+          <p className="mt-3 text-muted-foreground text-sm sm:text-base">
+            Four simple steps from idea to informed decision.
+          </p>
         </div>
 
         <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-4">
@@ -207,7 +207,6 @@ function HowItWorks() {
                 </div>
               </div>
               <h3 className="text-base font-bold text-foreground">{step.title}</h3>
-              <p className="text-xs text-primary/60 font-medium mt-0.5">{step.titleHi}</p>
               <p className="mt-2 text-sm text-muted-foreground max-w-[240px] leading-relaxed">
                 {step.desc}
               </p>
@@ -225,37 +224,37 @@ function WhatWeAnalyze() {
     {
       icon: <Users className="h-5 w-5" />,
       title: "Market Reach",
-      desc: "How many customers can you realistically reach from your location?",
+      desc: "How many potential customers can you realistically reach from your location?",
       color: "bg-blue-50 text-blue-600 border-blue-200/60",
     },
     {
       icon: <Lightbulb className="h-5 w-5" />,
       title: "Opportunity",
-      desc: "What gaps exist in the local market that your business can fill?",
+      desc: "What gaps exist in the local market that your business could fill?",
       color: "bg-amber-50 text-amber-600 border-amber-200/60",
     },
     {
       icon: <ShieldCheck className="h-5 w-5" />,
       title: "SWOT Analysis",
-      desc: "Personalized strengths, weaknesses, opportunities and threats.",
+      desc: "A personalized breakdown of your strengths, weaknesses, opportunities and threats.",
       color: "bg-emerald-50 text-emerald-600 border-emerald-200/60",
     },
     {
       icon: <AlertTriangle className="h-5 w-5" />,
       title: "Local Risks",
-      desc: "Key risks in your area with severity, impact and mitigations.",
+      desc: "Key risks in your area, their severity, and practical ways to reduce them.",
       color: "bg-red-50 text-red-600 border-red-200/60",
     },
     {
       icon: <Target className="h-5 w-5" />,
       title: "Competition",
-      desc: "Who are your competitors, how many exist, and where are they?",
+      desc: "Who your competitors are, how many exist nearby, and where they operate.",
       color: "bg-purple-50 text-purple-600 border-purple-200/60",
     },
     {
       icon: <TrendingUp className="h-5 w-5" />,
       title: "Product Pricing",
-      desc: "Regional pricing data and recommended pricing for your products.",
+      desc: "Regional pricing data and a recommended price range for your products.",
       color: "bg-cyan-50 text-cyan-600 border-cyan-200/60",
     },
   ];
@@ -271,7 +270,8 @@ function WhatWeAnalyze() {
             What We <span className="italic text-primary">Analyze</span>
           </h2>
           <p className="mt-3 text-muted-foreground text-sm sm:text-base">
-            Your analysis combines location, business and available capital.
+            Your analysis combines your location, business type and available capital
+            to give you a complete picture.
           </p>
         </div>
 
@@ -302,17 +302,17 @@ function FinancialPlanning() {
     {
       icon: <IndianRupee className="h-5 w-5" />,
       title: "Smart Capital Planning",
-      desc: "See exactly how your contribution connects to loan amounts, government schemes, and monthly repayment plans.",
+      desc: "See exactly how your savings connect to loan amounts, government schemes and monthly repayment plans — so you know your financial picture before you commit.",
     },
     {
       icon: <BarChart3 className="h-5 w-5" />,
       title: "Revenue Estimates",
-      desc: "Get projected monthly revenue ranges based on local market data and realistic business assumptions.",
+      desc: "Get projected monthly revenue ranges based on local market data and realistic assumptions for your specific business and location.",
     },
     {
       icon: <Check className="h-5 w-5" />,
-      title: "GO / CAUTION / RETHINK",
-      desc: "A clear, honest recommendation so you know whether to proceed, be careful, or consider alternatives.",
+      title: "Clear GO / CAUTION / RETHINK",
+      desc: "A straightforward, honest recommendation so you know whether to proceed with confidence, be careful, or consider a different direction.",
     },
   ];
 
@@ -325,12 +325,14 @@ function FinancialPlanning() {
               Financial Clarity
             </p>
             <h2 className="text-3xl sm:text-4xl font-bold leading-tight">
-              Complete Financial{" "}
-              <span className="italic text-primary">Planning</span> for Your Business
+              Complete{" "}
+              <span className="italic text-primary">Financial Planning</span>{" "}
+              for Your Business
             </h2>
             <p className="mt-4 text-muted-foreground leading-relaxed">
-              From your initial contribution to government loan schemes, we help
-              you understand every rupee before you invest.
+              From your initial savings to government loan schemes, RuralBiz AI
+              helps you understand every rupee before you invest. No surprises, no
+              guesswork — just clarity.
             </p>
             <Link
               to="/onboarding"
@@ -378,14 +380,17 @@ function TrustSection() {
             Trusted & <span className="italic text-primary">Transparent</span>
           </h2>
           <p className="mt-4 text-muted-foreground leading-relaxed text-sm sm:text-base">
-            Recommendations are based on available data, estimates and defined rules. Verify
-            critical financial and regulatory information before making investment decisions.
+            RuralBiz AI provides recommendations based on available data, market
+            estimates and defined rules. We clearly label what is verified data,
+            what is estimated, and what is AI-generated insight. Always verify
+            critical financial and regulatory information before making investment
+            decisions.
           </p>
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { icon: "✓", label: "Data-driven insights", desc: "Based on real market data" },
-              { icon: "≈", label: "Clearly marked estimates", desc: "We never hide uncertainty" },
-              { icon: "🛡️", desc: "Your data stays with you", label: "Privacy-first approach" },
+              { icon: "✓", label: "Data-Driven Insights", desc: "Based on real market data where available" },
+              { icon: "≈", label: "Clearly Marked Estimates", desc: "We never hide uncertainty" },
+              { icon: "🛡️", label: "Privacy-First Approach", desc: "Your data stays with you" },
             ].map((t) => (
               <div
                 key={t.label}
@@ -415,8 +420,9 @@ function FinalCTA() {
               Ready to Check Your Business Idea?
             </h2>
             <p className="text-primary-foreground/70 text-sm sm:text-base max-w-lg mx-auto mb-8">
-              Take the first step toward a smarter business decision. It takes less
-              than 3 minutes.
+              Tell us where you want to start, what you want to build, and how
+              much you can invest — and we will help you understand whether this is
+              a sensible business decision. It takes less than 3 minutes.
             </p>
             <Link
               to="/onboarding"

@@ -262,7 +262,7 @@ function LocationStep({
           Where do you want to start your business?
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Select your village, town or block
+          Select your village, town or block — we will analyze the local market around it
         </p>
       </div>
 
@@ -381,7 +381,7 @@ function BusinessStep({
           What business are you planning?
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Choose a category that best fits your idea
+          Pick the category that best describes what you want to start
         </p>
       </div>
 
@@ -473,7 +473,7 @@ function CapitalStep({
           How much can you contribute?
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          This is the amount you can contribute yourself from your savings
+          This is the amount you can put in from your own savings. We will show you loan options based on this.
         </p>
       </div>
 
@@ -542,7 +542,7 @@ function ReviewStep({
           Review Your Selection
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Make sure everything looks correct before we analyze
+          Double-check everything before we run the analysis
         </p>
       </div>
 
@@ -652,10 +652,10 @@ function AnalysisLoader() {
               <Loader2 className="h-10 w-10 text-primary animate-spin" />
             </div>
             <h2 className="text-xl font-bold text-foreground">
-              Analyzing your business...
+              Analyzing your business idea...
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              This usually takes less than a minute
+              RuralBiz AI is evaluating your location, market and capital. This usually takes less than a minute.
             </p>
           </div>
 

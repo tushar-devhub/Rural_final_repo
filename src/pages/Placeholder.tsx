@@ -4,24 +4,24 @@ import { ArrowLeft, Construction } from "lucide-react";
 
 const placeholderData: Record<string, { title: string; titleHi: string; description: string }> = {
   advisor: {
-    title: "AI Advisor",
-    titleHi: "AI सलाहकार",
-    description: "Get personalized business advice from our AI assistant. This feature will help you understand complex business decisions in simple language.",
+    title: "AI Business Advisor",
+    titleHi: "AI व्यापार सलाहकार",
+    description: "Get personalized business advice from our AI assistant. Ask questions about your market, competitors, pricing and financing — and receive clear, simple guidance in your language.",
   },
   report: {
-    title: "Business Report",
-    titleHi: "व्यापार रिपोर्ट",
-    description: "Download and share your complete business feasibility report. This feature will generate a detailed PDF with all your analysis data.",
+    title: "Business Feasibility Report",
+    titleHi: "व्यापार व्यवहार्यता रिपोर्ट",
+    description: "Download a complete report of your feasibility analysis, including market data, risk assessment, financial overview and recommendations — ready to share with bank officers or partners.",
   },
   saved: {
     title: "Saved Assessments",
     titleHi: "सहेजी गई रिपोर्ट",
-    description: "View and manage all your previously saved assessments. Compare different business ideas and locations side by side.",
+    description: "View and manage all your previously saved assessments. Compare different business ideas and locations side by side to find your best option.",
   },
   settings: {
     title: "Settings",
     titleHi: "सेटिंग्स",
-    description: "Manage your profile, language preferences, and notification settings.",
+    description: "Manage your profile, language preferences and notification settings.",
   },
 };
 
@@ -33,7 +33,7 @@ export default function PlaceholderPage({ type = "default" }: PlaceholderProps) 
   const data = placeholderData[type] || {
     title: "Coming Soon",
     titleHi: "जल्द आ रहा है",
-    description: "This feature is under development and will be available in a future version.",
+    description: "This feature is under development and will be available in a future version of RuralBiz AI.",
   };
 
   return (
@@ -50,7 +50,7 @@ export default function PlaceholderPage({ type = "default" }: PlaceholderProps) 
             {data.description}
           </p>
           <p className="text-xs text-muted-foreground/60 mt-2">
-            Coming in a future version
+            Coming in a future version of RuralBiz AI
           </p>
           <Link
             to="/"

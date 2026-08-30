@@ -11,10 +11,11 @@ export function Footer() {
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
                 <Globe className="h-5 w-5" />
               </div>
-              <span className="text-xl font-bold font-sans-body">ViBusiness</span>
+              <span className="text-xl font-bold font-sans-body">RuralBiz AI</span>
             </div>
             <p className="text-sm text-primary-foreground/70 leading-relaxed max-w-xs">
-              Helping rural micro-entrepreneurs make smarter business decisions with AI-powered insights.
+              An AI-powered business advisory platform helping rural and semi-urban
+              entrepreneurs make smarter, data-driven decisions before they invest.
             </p>
           </div>
 
@@ -67,7 +68,7 @@ export function Footer() {
             </h4>
             <ul className="space-y-2.5">
               <li className="text-sm text-primary-foreground/70">
-                hello@vibusiness.in
+                hello@ruralbiz.ai
               </li>
               <li className="text-sm text-primary-foreground/70">
                 Helpline: 1800-XXX-XXXX
@@ -78,7 +79,7 @@ export function Footer() {
 
         <div className="mt-10 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-primary-foreground/50">
-            © 2026 ViBusiness. All rights reserved.
+            © 2026 RuralBiz AI. All rights reserved.
           </p>
           <p className="text-xs text-primary-foreground/40 text-center sm:text-right max-w-md">
             Recommendations are based on available data, estimates and defined rules. Verify critical financial and regulatory information before making investment decisions.
