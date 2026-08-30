@@ -38,7 +38,11 @@ export function CurrencyInput({
   );
 
   useEffect(() => {
-    if (value === 0) setDisplayValue("");
+    if (value === 0) {
+      setDisplayValue("");
+    } else {
+      setDisplayValue(formatIndianCurrency(value).replace("₹", ""));
+    }
   }, [value]);
 
   return (
