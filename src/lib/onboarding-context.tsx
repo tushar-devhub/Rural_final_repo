@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { Location } from "@/data/locations";
 import type { BusinessCategory } from "@/data/businesses";
-import type { FeasibilityData } from "@/data/feasibility";
+import type { FeasibilityData } from "@/data/feasibility-types";
 
 interface OnboardingState {
   location: Location | null;

@@ -1,211 +1,227 @@
-export interface FeasibilityData {
-  overallScore: number;
-  verdict: "good" | "caution" | "rethink";
-  verdictLabel: string;
-  marketReach: {
-    population: number;
-    households: number;
-    potentialCustomers: number;
-    nearbyVillages: number;
-    customerGroups: string[];
-    distributionChannels: string[];
-    summary: string;
-  };
-  opportunity: {
-    existingBusinesses: { name: string; count: number }[];
-    underserved: string;
-    alternatives: string[];
-    summary: string;
-  };
-  swot: {
-    strengths: string[];
-    weaknesses: string[];
-    opportunities: string[];
-    threats: string[];
-  };
-  risks: {
-    id: string;
-    name: string;
-    severity: "high" | "medium" | "low";
-    impact: string;
-    explanation: string;
-    mitigation: string;
-  }[];
-  competition: {
-    totalBusinesses: number;
-    density: "high" | "medium" | "low";
-    competitors: { name: string; type: string; distance: string }[];
-    summary: string;
-  };
-  pricing: {
-    regionalPrice: string;
-    competitorRange: string;
-    recommendedPrice: string;
-    explanation: string;
-  };
-  financial: {
-    availableContribution: number;
-    totalProjectCost: number;
-    potentialLoan: number;
-    recommendedScheme: string;
-    repayment: string;
-    monthlyEstimate: string;
-  };
-  decision: {
-    recommendation: "good" | "caution" | "rethink";
-    whyPoints: string[];
-    watchOuts: string[];
-    financialFit: string;
-    summary: string;
-  };
-  nextSteps: string[];
-}
+import { analyzeMarketReach, analyzeOpportunity, generateSWOT, identifyRisks, mapCompetitors, analyzePricing, calculateSubScores } from "@/engine/market";
+import { calculateProjectCost, calculateRepayment, calculateLoan, calculateAffordability } from "@/engine/financial";
+import type { FeasibilityData } from "./feasibility-types";
+import { locations } from "./locations";
+
+export type { FeasibilityData };
 
 export function generateFeasibility(
   businessId: string,
   capital: number,
-  _locationId: string,
+  locationId: string,
 ): FeasibilityData {
-  // Mock generation based on inputs - Phase 2 will use real calculations
-  const baseScore = businessId === "poultry-feed" ? 82 : businessId === "dairy" ? 78 : businessId === "grocery" ? 74 : 70;
-  const capitalBonus = capital >= 200000 ? 5 : capital >= 100000 ? 3 : 0;
-  const score = Math.min(95, baseScore + capitalBonus);
+  // Get location data
+  const location = locations.find((l) => l.id === locationId) || locations[0];
 
+  // ─── Market Analysis ───
+  const marketReach = analyzeMarketReach(
+    location.population,
+    location.households,
+    5, // default radius
+    businessId,
+  );
+
+  const opportunity = analyzeOpportunity(businessId, locationId);
+  const swot = generateSWOT(businessId, locationId, capital);
+  const risks = identifyRisks(businessId, locationId, capital);
+  const competition = mapCompetitors(businessId, locationId, 5);
+  const pricing = analyzePricing(businessId, locationId);
+
+  // ─── Financial Engine ───
+  const projectCost = calculateProjectCost(capital);
+  const loanInfo = calculateLoan(capital);
+  const affordability = calculateAffordability(capital, businessId, locationId);
+
+  // ─── Sub-Scores ───
+  const subScores = calculateSubScores(
+    businessId,
+    locationId,
+    capital,
+    location.population,
+    location.households,
+    5,
+  );
+
+  // ─── Overall Score ───
+  const overallScore = Math.round(
+    subScores.marketScore * 0.2 +
+    subScores.opportunityScore * 0.2 +
+    subScores.competitionScore * 0.2 +
+    subScores.riskScore * 0.2 +
+    subScores.financialFitScore * 0.2,
+  );
+
+  const verdict: "good" | "caution" | "rethink" =
+    overallScore >= 70 ? "good" : overallScore >= 50 ? "caution" : "rethink";
+
+  const verdictLabel =
+    verdict === "good"
+      ? "Good Potential"
+      : verdict === "caution"
+        ? "Proceed Carefully"
+        : "Consider Alternatives";
+
+  // ─── Financial Display ───
+  let repaymentDisplay = "N/A";
+  let monthlyRepaymentDisplay = "N/A";
+
+  if (loanInfo) {
+    const schedule = calculateRepayment(
+      loanInfo.loanAmount,
+      loanInfo.interestRate,
+      loanInfo.tenureYears,
+      loanInfo.moratoriumMonths,
+      "quarterly",
+    );
+
+    const payingEntries = schedule.entries.filter((e) => e.payment > 0);
+    if (payingEntries.length > 0) {
+      const avgQuarterly =
+        payingEntries.reduce((sum, e) => sum + e.payment, 0) / payingEntries.length;
+      const monthlyEquiv = Math.round(avgQuarterly / 3);
+      repaymentDisplay = `₹${monthlyEquiv.toLocaleString("en-IN")} / month`;
+      monthlyRepaymentDisplay = `₹${monthlyEquiv.toLocaleString("en-IN")} / month`;
+    }
+  }
+
+  // ─── Decision ───
+  const whyPoints: string[] = [];
+  const watchOuts: string[] = [];
+
+  if (marketReach.households > 3000) {
+    whyPoints.push(`Strong reachable customer base of ${marketReach.households.toLocaleString("en-IN")} households`);
+  } else {
+    whyPoints.push(`Reachable market of ${marketReach.households.toLocaleString("en-IN")} households — smaller but viable`);
+  }
+
+  if (competition.density === "low") {
+    whyPoints.push("Low competition in your business category");
+  } else if (competition.density === "medium") {
+    whyPoints.push("Moderate competition — room for differentiation");
+  } else {
+    watchOuts.push("High competition density — differentiation will be critical");
+  }
+
+  if (!projectCost.isLimitExceeded) {
+    whyPoints.push("Financial structure is within government scheme limits");
+  } else {
+    watchOuts.push("Your project cost exceeds the scheme maximum — you will need a compliant structure");
+  }
+
+  if (affordability.rating === "comfortable") {
+    whyPoints.push("Revenue projections suggest comfortable loan repayment");
+  } else if (affordability.rating === "tight") {
+    watchOuts.push("Loan repayment will be tight relative to expected revenue");
+  } else {
+    watchOuts.push("Revenue may not comfortably cover loan repayment — proceed with caution");
+  }
+
+  watchOuts.push("Supply dependency on limited wholesale markets");
+  watchOuts.push("Seasonal demand variations throughout the year");
+
+  // ─── Return ───
   return {
-    overallScore: score,
-    verdict: score >= 75 ? "good" : score >= 55 ? "caution" : "rethink",
-    verdictLabel: score >= 75 ? "Good Potential" : score >= 55 ? "Proceed Carefully" : "Consider Alternatives",
+    overallScore,
+    verdict,
+    verdictLabel,
+    subScores,
+
     marketReach: {
-      population: 28500,
-      households: 4200,
-      potentialCustomers: 2800,
-      nearbyVillages: 8,
-      customerGroups: ["Daily households", "Small shopkeepers", "Farmers", "Students"],
-      distributionChannels: ["Direct retail", "Wholesale market", "Home delivery", "Weekly haat"],
-      summary: "Your selected location has a strong base of 4,200 households within reach. Daily essentials see the highest demand.",
+      population: marketReach.population,
+      households: marketReach.households,
+      potentialCustomers: marketReach.estimatedConsumers,
+      nearbyVillages: marketReach.nearbyVillages,
+      customerGroups: marketReach.customerGroups.map((c) => c.name),
+      distributionChannels: marketReach.distributionChannels,
+      summary: marketReach.summary,
+      confidence: marketReach.confidence,
     },
+
     opportunity: {
-      existingBusinesses: [
-        { name: "Grocery", count: 35 },
-        { name: "Dairy", count: 18 },
-        { name: "Clothing", count: 12 },
-        { name: "Mobile Repair", count: 8 },
-        { name: "Poultry Feed", count: 1 },
-        { name: "Food Processing", count: 5 },
-      ],
-      underserved: "Poultry-feed retail appears underserved with only 1 existing unit serving the area.",
-      alternatives: ["Organic produce", "Cold storage", "Digital services"],
-      summary: "The local market shows a clear gap in poultry feed supply. High demand from nearby poultry farms.",
+      existingBusinesses: opportunity.existingBusinesses,
+      underserved: opportunity.underservedDetail,
+      alternatives: opportunity.alternatives,
+      summary: opportunity.summary,
+      opportunityScore: opportunity.opportunityScore,
+      highCompetitionWarning: opportunity.highCompetitionWarning,
     },
-    swot: {
-      strengths: [
-        "Strong reachable customer base of 4,200 households",
-        "Low competition in your specific business category",
-        "Good road connectivity to nearby markets",
-        "Growing demand for your products",
-      ],
-      weaknesses: [
-        "Limited cold storage facilities nearby",
-        "Seasonal fluctuations in customer demand",
-        "Higher transportation costs from wholesale markets",
-        "Limited skilled workforce availability",
-      ],
-      opportunities: [
-        "Government subsidies for micro-enterprises",
-        "Growing digital payment adoption",
-        "Expanding to nearby villages for wider reach",
-        "Partnerships with local self-help groups",
-      ],
-      threats: [
-        "New competitors may enter if the market grows",
-        "Rising transportation and fuel costs",
-        "Seasonal demand drops during festivals",
-        "Supply chain disruptions from wholesale markets",
-      ],
-    },
-    risks: [
-      {
-        id: "risk-1",
-        name: "Supply Risk",
-        severity: "high",
-        impact: "Can stop operations temporarily",
-        explanation: "Your area appears dependent on a limited number of wholesale suppliers.",
-        mitigation: "Identify at least 2 alternative suppliers. Build relationships with local producers.",
-      },
-      {
-        id: "risk-2",
-        name: "Seasonal Demand",
-        severity: "medium",
-        impact: "Revenue may dip 20-30% during off-season",
-        explanation: "Demand patterns show significant variation across months.",
-        mitigation: "Diversify your product range. Offer complementary products in off-season.",
-      },
-      {
-        id: "risk-3",
-        name: "Transportation",
-        severity: "medium",
-        impact: "Can increase costs and delay deliveries",
-        explanation: "Road conditions and distances to wholesale markets affect your margins.",
-        mitigation: "Plan bulk procurement. Negotiate delivery terms with suppliers.",
-      },
-      {
-        id: "risk-4",
-        name: "Payment Collection",
-        severity: "low",
-        impact: "May affect short-term cash flow",
-        explanation: "Some customers may prefer credit-based purchases.",
-        mitigation: "Set clear payment terms. Encourage digital payments for better tracking.",
-      },
-    ],
+
+    swot,
+
+    risks: risks.map((r) => ({
+      id: r.id,
+      name: r.name,
+      severity: r.severity,
+      impact: r.impact,
+      explanation: r.explanation,
+      mitigation: r.mitigation,
+    })),
+
     competition: {
-      totalBusinesses: 18,
-      density: "medium",
-      competitors: [
-        { name: "Sharma General Store", type: "Grocery", distance: "0.5 km" },
-        { name: "Raj Dairy Farm", type: "Dairy", distance: "1.2 km" },
-        { name: "Patel Traders", type: "Agriculture Inputs", distance: "0.8 km" },
-        { name: "Kumar Mobile Shop", type: "Mobile Repair", distance: "0.3 km" },
-        { name: "Singh Cloth House", type: "Clothing", distance: "1.5 km" },
-      ],
-      summary: "18 competing businesses found within your analysis radius. Competition is moderate with clear gaps in specific categories.",
+      totalBusinesses: competition.totalBusinesses,
+      density: competition.density,
+      competitors: competition.competitors,
+      summary: competition.summary,
     },
+
     pricing: {
-      regionalPrice: "₹58",
-      competitorRange: "₹55 – ₹64",
-      recommendedPrice: "₹60",
-      explanation: "Based on regional pricing data and competitor analysis, a price of ₹60 positions you competitively while maintaining healthy margins.",
+      regionalPrice: `₹${pricing.regionalPrice}`,
+      competitorRange: `₹${pricing.competitorRangeLow} – ₹${pricing.competitorRangeHigh}`,
+      recommendedPrice: `₹${pricing.recommendedPrice}`,
+      explanation: pricing.explanation,
+      unit: pricing.unit,
+      purchasingPower: pricing.purchasingPower,
+      demandIndicator: pricing.demandIndicator,
     },
+
     financial: {
       availableContribution: capital,
-      totalProjectCost: Math.round(capital * 2.5),
-      potentialLoan: Math.round(capital * 1.5),
-      recommendedScheme: "PMEGP (Prime Minister's Employment Generation Programme)",
-      repayment: "₹4,200 / month",
-      monthlyEstimate: "Expected monthly revenue: ₹35,000 – ₹50,000",
+      totalProjectCost: projectCost.totalProjectCost,
+      potentialLoan: projectCost.agencyFunding,
+      recommendedScheme: loanInfo ? loanInfo.scheme.name : "No applicable scheme",
+      repayment: repaymentDisplay,
+      monthlyEstimate: `Expected monthly revenue: ₹${affordability.expectedMonthlyRevenue.toLocaleString("en-IN")} – ₹${Math.round(affordability.expectedMonthlyRevenue * 1.4).toLocaleString("en-IN")}`,
+      projectCostBreakdown: projectCost,
+      loanDetails: loanInfo
+        ? {
+            amount: loanInfo.loanAmount,
+            interestRate: loanInfo.interestRate,
+            tenure: loanInfo.tenureYears,
+            moratorium: loanInfo.moratoriumMonths,
+          }
+        : null,
+      affordability: {
+        rating: affordability.rating,
+        ratingLabel: affordability.ratingLabel,
+        ratingIcon: affordability.ratingIcon,
+        expectedRevenue: affordability.expectedMonthlyRevenue,
+        operatingCosts: affordability.operatingCosts,
+        cashFlow: affordability.monthlyCashFlow,
+        monthlyRepayment: affordability.monthlyRepayment,
+        surplus: affordability.surplusOrDeficit,
+        assumptions: affordability.assumptions,
+      },
     },
+
     decision: {
-      recommendation: score >= 75 ? "good" : score >= 55 ? "caution" : "rethink",
-      whyPoints: [
-        "Strong reachable customer base of 4,200 households",
-        "Moderate competition with clear market gaps",
-        "Financial planning appears possible with available capital",
-        "Government schemes available for your business type",
-      ],
-      watchOuts: [
-        "Supply dependency on limited wholesale markets",
-        "Seasonal demand variations throughout the year",
-        "Transportation costs may affect margins",
-      ],
-      financialFit: `With ₹${(capital / 1000).toFixed(0)}K contribution and a potential loan, your financial structure looks manageable.`,
-      summary: "Your business shows good potential in the selected location. The market has room for your products and the financial structure appears viable.",
+      recommendation: verdict,
+      whyPoints,
+      watchOuts,
+      financialFit: `With ₹${(capital / 1000).toFixed(0)}K contribution, your projected loan of ₹${((projectCost.agencyFunding) / 1000).toFixed(0)}K through ${loanInfo?.scheme.name || "N/A"} results in ${affordability.ratingLabel.toLowerCase()} repayment affordability.`,
+      summary: verdict === "good"
+        ? "Your business shows good potential in the selected location. The market has room for your products and the financial structure appears viable."
+        : verdict === "caution"
+          ? "Your business idea has potential but carries notable risks. Careful planning and cost management will be important."
+          : "Based on current inputs, this business may face significant challenges in this location. Consider alternatives or adjust your approach.",
     },
+
     nextSteps: [
       "Validate local customer demand through direct conversations",
-      "Contact and negotiate with 2-3 alternative suppliers",
+      "Contact and negotiate with 2–3 alternative suppliers",
       "Compare prices from nearby competitors in person",
       "Finalize your starting investment and timeline",
-      "Review financing requirements and available government schemes",
-      "Visit the District Industries Centre (DIC) for registration",
+      "Visit the District Industries Centre (DIC) for scheme eligibility",
+      "Prepare documentation for loan application",
     ],
   };
 }

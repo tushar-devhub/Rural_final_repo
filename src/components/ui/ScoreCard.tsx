@@ -1,13 +1,30 @@
 import { cn } from "@/lib/utils";
 
+interface SubScores {
+  marketScore: number;
+  opportunityScore: number;
+  competitionScore: number;
+  riskScore: number;
+  financialFitScore: number;
+}
+
 interface ScoreCardProps {
   score: number;
   verdict: "good" | "caution" | "rethink";
   verdictLabel: string;
   businessName: string;
   locationName: string;
+  subScores?: SubScores;
   className?: string;
 }
+
+const subScoreLabels: Record<keyof SubScores, string> = {
+  marketScore: "Market",
+  opportunityScore: "Opportunity",
+  competitionScore: "Competition",
+  riskScore: "Risk",
+  financialFitScore: "Financial Fit",
+};
 
 export function ScoreCard({
   score,
@@ -15,6 +32,7 @@ export function ScoreCard({
   verdictLabel,
   businessName,
   locationName,
+  subScores,
   className,
 }: ScoreCardProps) {
   const verdictColors = {
@@ -37,6 +55,12 @@ export function ScoreCard({
 
   const circumference = 2 * Math.PI * 54;
   const offset = circumference - (score / 100) * circumference;
+
+  const getScoreColor = (s: number) => {
+    if (s >= 70) return "text-emerald-600";
+    if (s >= 50) return "text-amber-600";
+    return "text-red-600";
+  };
 
   return (
     <div
@@ -103,6 +127,48 @@ export function ScoreCard({
           <p className="text-sm text-muted-foreground mt-0.5">{locationName}</p>
         </div>
       </div>
+
+      {/* Sub-scores */}
+      {subScores && (
+        <div className="mt-6 grid grid-cols-5 gap-2 sm:gap-3">
+          {Object.entries(subScores).map(([key, value]) => (
+            <div key={key} className="text-center">
+              <div className="relative mx-auto w-12 h-12 sm:w-14 sm:h-14">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke="currentColor"
+                    className="text-muted/40"
+                    strokeWidth="3"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke="currentColor"
+                    className={getScoreColor(value)}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(value / 100) * 94.25} 94.25`}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className={cn("text-xs font-bold", getScoreColor(value))}>
+                    {value}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] font-medium text-muted-foreground mt-1.5">
+                {subScoreLabels[key as keyof SubScores]}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

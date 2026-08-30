@@ -13,15 +13,16 @@ import {
   Target,
   TrendingUp,
   IndianRupee,
-  MapPin,
   CheckCircle2,
   ArrowUpRight,
-  ExternalLink,
   Zap,
   ChevronRight,
   CircleDot,
   Home,
   Store,
+  Calculator,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
@@ -74,20 +75,21 @@ export default function Dashboard() {
           <span className="text-foreground font-medium">Feasibility Dashboard</span>
         </div>
 
-        {/* Score Card */}
+        {/* Score Card with Sub-Scores */}
         <ScoreCard
           score={f.overallScore}
           verdict={f.verdict}
           verdictLabel={f.verdictLabel}
           businessName={business?.name || "Your Business"}
           locationName={`${locationLabel} • ${radius} km radius`}
+          subScores={f.subScores}
         />
 
         {/* Data Trust */}
         <div className="mt-4">
           <DataConfidenceBadge type="estimated" confidence="medium" />
           <p className="text-xs text-muted-foreground mt-1 ml-1">
-            Demo estimate — analysis based on simulated data for demonstration
+            Analysis based on simulated market data for demonstration purposes
           </p>
         </div>
 
@@ -98,6 +100,7 @@ export default function Dashboard() {
             icon={<Users className="h-5 w-5" />}
             title="Market Reach"
             badge="Estimated"
+            score={f.subScores?.marketScore}
           >
             <div className="grid grid-cols-2 gap-3 mb-4">
               <MetricBlock label="Population" value={f.marketReach.population.toLocaleString("en-IN")} />
@@ -134,6 +137,7 @@ export default function Dashboard() {
             title="Opportunity"
             badge="AI Insight"
             badgeType="ai"
+            score={f.subScores?.opportunityScore}
           >
             <div className="mb-4">
               <p className="text-xs font-semibold text-foreground mb-2">Existing Businesses in Area</p>
@@ -156,6 +160,12 @@ export default function Dashboard() {
               <p className="text-xs font-semibold text-primary mb-0.5">💡 Market Gap</p>
               <p className="text-xs text-muted-foreground">{f.opportunity.underserved}</p>
             </div>
+            {f.opportunity.highCompetitionWarning && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-3">
+                <p className="text-xs font-semibold text-amber-700 mb-0.5">⚠️ Competition Alert</p>
+                <p className="text-xs text-amber-600">{f.opportunity.highCompetitionWarning}</p>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground leading-relaxed">{f.opportunity.summary}</p>
           </SectionCard>
 
@@ -185,6 +195,7 @@ export default function Dashboard() {
             icon={<AlertTriangle className="h-5 w-5" />}
             title="Local Risks"
             badge="Estimated"
+            score={f.subScores?.riskScore}
           >
             <div className="space-y-3">
               {f.risks.map((risk) => (
@@ -210,6 +221,7 @@ export default function Dashboard() {
             icon={<Target className="h-5 w-5" />}
             title="Competition"
             badge="Estimated"
+            score={f.subScores?.competitionScore}
           >
             {/* Competition map placeholder */}
             <div className="rounded-xl bg-[#F4F8EF] border border-border/60 h-36 flex items-center justify-center mb-4 relative overflow-hidden">
@@ -226,7 +238,6 @@ export default function Dashboard() {
                   </span>
                 </p>
               </div>
-              {/* Decorative dots for "map" */}
               <div className="absolute inset-0 opacity-10">
                 {Array.from({ length: 20 }).map((_, i) => (
                   <div
@@ -264,6 +275,9 @@ export default function Dashboard() {
             badge="AI Insight"
             badgeType="ai"
           >
+            {f.pricing.unit && (
+              <p className="text-xs text-muted-foreground mb-3">Unit: {f.pricing.unit}</p>
+            )}
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="rounded-xl bg-muted/50 p-3 text-center">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Regional Price</p>
@@ -278,46 +292,156 @@ export default function Dashboard() {
                 <p className="text-lg font-bold text-primary mt-1">{f.pricing.recommendedPrice}</p>
               </div>
             </div>
+            {/* Why this price */}
+            <div className="rounded-lg bg-muted/50 p-3 mb-3">
+              <p className="text-xs font-semibold text-foreground mb-1">Why this price?</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{f.pricing.explanation}</p>
+            </div>
             <p className="text-xs text-muted-foreground leading-relaxed">{f.pricing.explanation}</p>
           </SectionCard>
 
-          {/* Financial Overview */}
+          {/* Financial Overview — Full Engine */}
           <SectionCard
             icon={<IndianRupee className="h-5 w-5" />}
             title="Financial Overview"
-            badge="Demo"
+            badge="Engine"
+            badgeType="verified"
             className="lg:col-span-2"
           >
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <MetricBlock
-                label="Your Contribution"
-                value={formatIndianCurrency(f.financial.availableContribution)}
-                highlight
-              />
-              <MetricBlock
-                label="Total Project Cost"
-                value={formatIndianCurrency(f.financial.totalProjectCost)}
-              />
-              <MetricBlock
-                label="Potential Loan"
-                value={formatIndianCurrency(f.financial.potentialLoan)}
-              />
-              <MetricBlock
-                label="Monthly Repayment"
-                value={f.financial.repayment}
-              />
-              <div className="col-span-2 sm:col-span-3 lg:col-span-2 rounded-xl bg-[#F4F8EF] border border-border/60 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                  Recommended Scheme
-                </p>
-                <p className="text-sm font-bold text-foreground">{f.financial.recommendedScheme}</p>
-                <p className="text-xs text-muted-foreground mt-1">{f.financial.monthlyEstimate}</p>
+            {/* Project Cost Breakdown */}
+            {f.financial.projectCostBreakdown && (
+              <div className="mb-5">
+                <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+                  <Calculator className="h-3.5 w-3.5" />
+                  Project Cost Breakdown
+                </h4>
+
+                {f.financial.projectCostBreakdown.isLimitExceeded && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-3">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-amber-700">Scheme Limit Exceeded</p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          Calculated project cost ({formatIndianCurrency(f.financial.projectCostBreakdown.rawProjectCost)}) exceeds the scheme maximum of {formatIndianCurrency(f.financial.projectCostBreakdown.schemeMaxFunding * 1.11)}.
+                          A compliant structure is shown below.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <MetricBlock
+                    label="Your Contribution"
+                    value={formatIndianCurrency(f.financial.projectCostBreakdown.entrepreneurContribution)}
+                    highlight
+                  />
+                  <MetricBlock
+                    label={f.financial.projectCostBreakdown.isLimitExceeded ? "Compliant Project Cost" : "Total Project Cost"}
+                    value={formatIndianCurrency(f.financial.projectCostBreakdown.isLimitExceeded ? f.financial.projectCostBreakdown.compliantProjectCost || f.financial.totalProjectCost : f.financial.totalProjectCost)}
+                  />
+                  <MetricBlock
+                    label="Agency Funding"
+                    value={formatIndianCurrency(f.financial.projectCostBreakdown.isLimitExceeded ? f.financial.projectCostBreakdown.compliantAgencyFunding || f.financial.potentialLoan : f.financial.potentialLoan)}
+                  />
+                  <MetricBlock
+                    label="Your Contribution (Scheme)"
+                    value={f.financial.projectCostBreakdown.isLimitExceeded ? formatIndianCurrency(f.financial.projectCostBreakdown.compliantEntrepreneurContribution || 0) : "—"}
+                  />
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Loan Details */}
+            {f.financial.loanDetails && (
+              <div className="mb-5">
+                <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5" />
+                  Loan Details — {f.financial.recommendedScheme}
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <MetricBlock
+                    label="Loan Amount"
+                    value={formatIndianCurrency(f.financial.loanDetails.amount)}
+                  />
+                  <MetricBlock
+                    label="Interest Rate"
+                    value={`${f.financial.loanDetails.interestRate}%`}
+                  />
+                  <MetricBlock
+                    label="Tenure"
+                    value={`${f.financial.loanDetails.tenure} years`}
+                  />
+                  <MetricBlock
+                    label="Moratorium"
+                    value={`${f.financial.loanDetails.moratorium} months`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Affordability */}
+            {f.financial.affordability && (
+              <div className="mb-5">
+                <h4 className="text-xs font-bold text-foreground mb-3">Affordability Assessment</h4>
+                <div className={cn(
+                  "rounded-xl border p-4",
+                  f.financial.affordability.rating === "comfortable"
+                    ? "bg-emerald-50 border-emerald-200"
+                    : f.financial.affordability.rating === "tight"
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-red-50 border-red-200",
+                )}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">{f.financial.affordability.ratingIcon}</span>
+                    <span className={cn(
+                      "text-sm font-bold",
+                      f.financial.affordability.rating === "comfortable"
+                        ? "text-emerald-700"
+                        : f.financial.affordability.rating === "tight"
+                          ? "text-amber-700"
+                          : "text-red-700",
+                    )}>
+                      {f.financial.affordability.ratingLabel}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Expected Revenue</p>
+                      <p className="font-semibold text-foreground">{formatIndianCurrency(f.financial.affordability.expectedRevenue)}/mo</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Operating Costs</p>
+                      <p className="font-semibold text-foreground">{formatIndianCurrency(f.financial.affordability.operatingCosts)}/mo</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Cash Flow</p>
+                      <p className="font-semibold text-foreground">{formatIndianCurrency(f.financial.affordability.cashFlow)}/mo</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Loan Repayment</p>
+                      <p className="font-semibold text-foreground">{formatIndianCurrency(f.financial.affordability.monthlyRepayment)}/mo</p>
+                    </div>
+                  </div>
+                  {f.financial.affordability.assumptions.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-current/10">
+                      <p className="text-[10px] font-semibold text-muted-foreground mb-1">Assumptions</p>
+                      <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                        {f.financial.affordability.assumptions.map((a, i) => (
+                          <li key={i}>• {a}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="mt-3">
-              <DataConfidenceBadge type="estimated" />
+              <DataConfidenceBadge type="verified" />
               <p className="text-[11px] text-muted-foreground mt-1">
-                Demo values — a financial engine will replace this in Phase 2
+                Financial calculations are deterministic and based on PMEGP/MUDRA scheme rules
               </p>
             </div>
           </SectionCard>
@@ -437,6 +561,7 @@ function SectionCard({
   title,
   badge,
   badgeType,
+  score,
   children,
   className,
 }: {
@@ -444,6 +569,7 @@ function SectionCard({
   title: string;
   badge?: string;
   badgeType?: "verified" | "estimated" | "ai";
+  score?: number;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -456,6 +582,14 @@ function SectionCard({
         <div className="flex-1">
           <h3 className="text-sm font-bold text-foreground">{title}</h3>
         </div>
+        {score !== undefined && (
+          <div className={cn(
+            "text-xs font-bold px-2 py-0.5 rounded-full",
+            score >= 70 ? "bg-emerald-50 text-emerald-600" : score >= 50 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600",
+          )}>
+            {score}
+          </div>
+        )}
         {badge && (
           <span
             className={cn(
