@@ -8,7 +8,7 @@ import { locations, type Location } from "@/data/locations";
 import { businessCategories, type BusinessCategory } from "@/data/businesses";
 import { formatIndianCurrency } from "@/data/assessment";
 import { getRecommendations } from "@/data/recommendations";
-import { UPMap } from "@/components/UPMap";
+import UPMap from "@/components/UPMap";
 import {
   MapPin, Search, Store, Lightbulb, IndianRupee,
   CheckCircle2, ArrowLeft, ArrowRight, Edit3, Check,
@@ -224,7 +224,7 @@ function LocationStep({ search, onSearchChange, locations: locs, selected, onSel
       {/* UP Map */}
       <UPMap
         selectedDistrict={selected?.district}
-        selectedLocationName={selected?.name}
+        selectedTown={selected?.name}
         radius={radius}
         className="h-48 sm:h-56 mb-4"
       />

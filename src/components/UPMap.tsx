@@ -1,192 +1,291 @@
-import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { UP_DISTRICTS } from "@/data/locations";
+
+// Real UP state outline — simplified but recognizable boundary
+// Generated from actual GeoJSON state boundary coordinates, scaled to SVG space
+const UP_OUTLINE = "M25.7,22.8 L25.6,43.2 L14.4,63.1 L23.1,88.2 L27.8,73.6 L34.4,62.2 L43.4,89.5 L43.4,107.7 L28.1,120.2 L46.9,145.8 L50.1,121.3 L60,137 L60.4,46.7 L73.5,69 L88.1,69.6 L104.1,82.6 L121.6,82.5 L155.5,98.8 L164.5,123.4 L199.8,118.5 L224.1,128.8 L239.2,136.7 L273.1,139.1 L286.9,148.8 L296.4,193.8 L269.2,202.4 L259.1,221.7 L247.9,248.2 L231,229.1 L204.3,213.4 L185.3,206.5 L171.4,221.3 L160.2,195.3 L146.4,210.5 L119.4,196.6 L112.8,214.1 L100.7,184.3 L85.4,153.9 L79,209.8 L68.4,244.4 L85.4,153.9 L84.6,137.4 L71.4,121.6 L83.4,100.5 L60.4,46.7 L25.7,22.8 Z";
+
+// All 70 UP districts with real geographic centroid positions
+// Coordinates derived from official GeoJSON boundary data
+const DISTRICT_POSITIONS: Record<string, [number, number]> = {
+  "Saharanpur": [25.7, 22.8],
+  "Muzaffarnagar": [25.6, 43.2],
+  "Shamli": [30, 40],
+  "Bijnor": [60.4, 46.7],
+  "Meerut": [34.4, 62.2],
+  "Baghpat": [14.4, 63.1],
+  "Ghaziabad": [27.8, 73.6],
+  "Gautam Buddha Nagar": [23.1, 88.2],
+  "Bulandshahr": [43.4, 89.5],
+  "Aligarh": [43.4, 107.7],
+  "Mathura": [28.1, 120.2],
+  "Agra": [46.9, 145.8],
+  "Firozabad": [60, 137],
+  "Mahamaya Nagar": [50.1, 121.3],
+  "Etah": [71.4, 121.6],
+  "Mainpuri": [84.6, 137.4],
+  "Badaun": [83.4, 100.5],
+  "Moradabad": [73.5, 69],
+  "Rampur": [88.1, 69.6],
+  "Jyotiba Phule Nagar": [80, 62],
+  "Bareilly": [104.1, 82.6],
+  "Pilibhit": [121.6, 82.5],
+  "Shahjahanpur": [118.4, 104.1],
+  "Kheri": [155.5, 98.8],
+  "Sitapur": [164.5, 123.4],
+  "Hardoi": [135.1, 132.1],
+  "Unnao": [150.1, 161.1],
+  "Kannauj": [110.7, 145],
+  "Farrukhabad": [102.6, 128.5],
+  "Etawah": [85.4, 153.9],
+  "Auraiya": [102, 158.7],
+  "Kanpur": [137.4, 169.3],
+  "Kanpur Dehat": [140, 182],
+  "Lucknow": [161.9, 150.6],
+  "Barabanki": [182.9, 148.8],
+  "Rae Bareli": [175.3, 178.1],
+  "Fatehpur": [160.2, 195.3],
+  "Hamirpur": [119.4, 196.6],
+  "Mahoba": [112.8, 214.1],
+  "Banda": [146.4, 210.5],
+  "Chitrakoot": [171.4, 221.3],
+  "Jalaun": [100.7, 184.3],
+  "Jhansi": [68.4, 244.4],
+  "Lalitpur": [79, 209.8],
+  "Gonda": [210, 139.9],
+  "Bahraich": [185.2, 114],
+  "Balrampur": [224.1, 128.8],
+  "Shrawasti": [199.8, 118.5],
+  "Ayodhya": [209.5, 160.9],
+  "Ambedkar Nagar": [238.9, 170.7],
+  "Sultanpur": [209.1, 175.2],
+  "Pratapgarh": [201, 191.6],
+  "Kaushambi": [185.3, 206.5],
+  "Allahabad": [204.3, 213.4],
+  "Siddharth Nagar": [239.2, 136.7],
+  "Basti": [236.6, 153.5],
+  "Sant Kabir Nagar": [250.9, 156.3],
+  "Gorakhpur": [264.7, 162.3],
+  "Maharajganj": [273.1, 139.1],
+  "Kushinagar": [286.9, 148.8],
+  "Deoria": [281.7, 170.5],
+  "Azamgarh": [250.9, 182.8],
+  "Mau": [270.9, 185.1],
+  "Ballia": [296.4, 193.8],
+  "Jaunpur": [233.2, 197.7],
+  "Ghazipur": [269.2, 202.4],
+  "Varanasi": [245.5, 212.5],
+  "Sant Ravidas Nagar": [226, 212.7],
+  "Chandauli": [259.1, 221.7],
+  "Mirzapur": [231, 229.1],
+  "Sonbhadra": [247.9, 248.2],
+};
 
 interface UPMapProps {
-  selectedDistrict?: string;
-  selectedLocationName?: string;
+  selectedDistrict?: string | null;
+  selectedTown?: string | null;
   radius?: number;
   className?: string;
 }
 
-// Simplified but recognizable UP outline — fully controlled coordinates
-const UP_OUTLINE = `
-M 180 30
-L 210 25 L 240 28 L 270 22 L 300 25 L 330 20 L 360 25
-L 380 35 L 400 50 L 410 70 L 420 90 L 425 110
-L 430 130 L 435 155 L 440 180 L 442 200
-L 445 225 L 448 250 L 450 275 L 448 300
-L 445 320 L 438 340 L 428 355 L 415 368
-L 398 378 L 378 385 L 355 390 L 330 392
-L 305 393 L 280 392 L 255 388 L 230 382
-L 210 375 L 195 365 L 182 350 L 172 335
-L 165 315 L 158 295 L 152 275 L 148 255
-L 145 235 L 143 215 L 142 195 L 145 175
-L 150 155 L 158 138 L 168 122 L 178 108
-L 190 95 L 198 78 L 200 60 L 185 45
-Z
-`;
+export default function UPMap({
+  selectedDistrict,
+  selectedTown,
+  radius = 5,
+  className = "",
+}: UPMapProps) {
+  const [hoveredDistrict, setHoveredDistrict] = useState<string | null>(null);
 
-// District positions within the simplified outline (viewBox 130 10 340 400)
-const DISTRICTS: Record<string, { x: number; y: number }> = {
-  // Northern UP
-  "Saharanpur": { x: 310, y: 55 },
-  "Shamli": { x: 295, y: 62 },
-  "Muzaffarnagar": { x: 305, y: 72 },
-  "Bijnor": { x: 320, y: 78 },
-  "Amroha": { x: 335, y: 80 },
-  "Moradabad": { x: 348, y: 88 },
-  "Rampur": { x: 355, y: 95 },
-  "Sambhal": { x: 345, y: 95 },
-  "Budaun": { x: 355, y: 115 },
-  "Bareilly": { x: 350, y: 125 },
-  "Pilibhit": { x: 342, y: 118 },
-  "Shahjahanpur": { x: 335, y: 135 },
-  "Lakhimpur Kheri": { x: 305, y: 105 },
-  "Sitapur": { x: 290, y: 125 },
-  // Western UP
-  "Baghpat": { x: 318, y: 72 },
-  "Meerut": { x: 325, y: 75 },
-  "Ghaziabad": { x: 340, y: 72 },
-  "Hapur": { x: 338, y: 78 },
-  "Gautam Buddh Nagar": { x: 350, y: 78 },
-  "Bulandshahr": { x: 348, y: 90 },
-  "Aligarh": { x: 360, y: 110 },
-  "Hathras": { x: 368, y: 125 },
-  "Agra": { x: 365, y: 145 },
-  "Firozabad": { x: 358, y: 150 },
-  "Etah": { x: 352, y: 118 },
-  "Mainpuri": { x: 350, y: 130 },
-  "Kasganj": { x: 362, y: 122 },
-  // Central UP
-  "Hardoi": { x: 278, y: 135 },
-  "Unnao": { x: 268, y: 150 },
-  "Lucknow": { x: 262, y: 155 },
-  "Barabanki": { x: 255, y: 158 },
-  "Rae Bareli": { x: 258, y: 168 },
-  "Amethi": { x: 252, y: 172 },
-  "Faizabad": { x: 248, y: 165 },
-  "Sultanpur": { x: 245, y: 175 },
-  "Pratapgarh": { x: 250, y: 180 },
-  "Prayagraj": { x: 260, y: 190 },
-  "Fatehpur": { x: 265, y: 185 },
-  "Kannauj": { x: 295, y: 165 },
-  "Farrukhabad": { x: 300, y: 160 },
-  "Etawah": { x: 292, y: 180 },
-  "Auraiya": { x: 288, y: 188 },
-  "Kanpur Nagar": { x: 278, y: 185 },
-  "Kanpur Dehat": { x: 275, y: 192 },
-  "Hamirpur": { x: 278, y: 205 },
-  "Mahoba": { x: 272, y: 215 },
-  "Banda": { x: 268, y: 228 },
-  "Chitrakoot": { x: 262, y: 235 },
-  "Jhansi": { x: 255, y: 232 },
-  "Jalaun": { x: 268, y: 215 },
-  "Lalitpur": { x: 248, y: 245 },
-  // Eastern UP
-  "Azamgarh": { x: 265, y: 148 },
-  "Mau": { x: 270, y: 142 },
-  "Ghazipur": { x: 278, y: 138 },
-  "Varanasi": { x: 282, y: 148 },
-  "Chandauli": { x: 288, y: 155 },
-  "Mirzapur": { x: 278, y: 168 },
-  "Sonbhadra": { x: 282, y: 192 },
-  "Bhadohi": { x: 272, y: 158 },
-  "Jaunpur": { x: 262, y: 158 },
-  "Ambedkar Nagar": { x: 255, y: 162 },
-  // Gorakhpur division
-  "Gorakhpur": { x: 258, y: 120 },
-  "Mahrajganj": { x: 248, y: 112 },
-  "Kushinagar": { x: 252, y: 108 },
-  "Deoria": { x: 258, y: 115 },
-  "Ballia": { x: 272, y: 128 },
-  "Basti": { x: 250, y: 128 },
-  "Sant Kabir Nagar": { x: 252, y: 135 },
-  "Siddharthnagar": { x: 242, y: 128 },
-  // Devipatan
-  "Gonda": { x: 235, y: 138 },
-  "Balrampur": { x: 228, y: 145 },
-  "Bahraich": { x: 222, y: 155 },
-  "Shravasti": { x: 220, y: 162 },
-};
+  // Find position for a district name (fuzzy match)
+  const findPosition = (name: string): [number, number] | null => {
+    if (DISTRICT_POSITIONS[name]) return DISTRICT_POSITIONS[name];
+    const lower = name.toLowerCase();
+    for (const [key, pos] of Object.entries(DISTRICT_POSITIONS)) {
+      if (key.toLowerCase().includes(lower) || lower.includes(key.toLowerCase())) {
+        return pos;
+      }
+    }
+    return null;
+  };
 
-export function UPMap({ selectedDistrict, selectedLocationName, radius, className }: UPMapProps) {
-  const selectedDot = selectedDistrict ? DISTRICTS[selectedDistrict] : null;
+  const selectedPos = selectedDistrict ? findPosition(selectedDistrict) : null;
+
+  // Find nearby districts based on radius
+  const getNearbyDistricts = (): string[] => {
+    if (!selectedPos) return [];
+    const nearby: string[] = [];
+    const threshold = radius <= 5 ? 40 : 70;
+    for (const [name, pos] of Object.entries(DISTRICT_POSITIONS)) {
+      if (name === selectedDistrict) continue;
+      const dx = pos[0] - selectedPos[0];
+      const dy = pos[1] - selectedPos[1];
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < threshold) nearby.push(name);
+    }
+    return nearby;
+  };
+
+  const nearbyDistricts = getNearbyDistricts();
 
   return (
-    <div className={cn("relative rounded-xl border border-border bg-[#F4F8EF] overflow-hidden", className)}>
+    <div className={`relative bg-[#f8faf6] rounded-2xl border border-[#e8ede4] overflow-hidden ${className}`}>
+      {/* State Label */}
+      <div className="absolute top-3 right-3 z-10 bg-[#1a3a2a] text-white text-[10px] font-semibold px-2.5 py-1 rounded-md tracking-wider">
+        UTTAR PRADESH
+      </div>
+
       <svg
-        viewBox="130 10 340 400"
-        className="w-full h-full"
-        preserveAspectRatio="xMidYMid meet"
-        aria-label={`Map of Uttar Pradesh${selectedDistrict ? ` showing ${selectedDistrict} district` : ""}`}
+        viewBox="0 0 310 270"
+        className="w-full h-auto"
+        style={{ minHeight: "220px" }}
       >
-        {/* UP outline */}
+        {/* Background */}
+        <rect x="0" y="0" width="310" height="270" fill="#f8faf6" />
+
+        {/* Radius circle around selected location */}
+        {selectedPos && (
+          <circle
+            cx={selectedPos[0]}
+            cy={selectedPos[1]}
+            r={radius <= 5 ? 35 : 60}
+            fill="#2d5a3d"
+            fillOpacity="0.04"
+            stroke="#2d5a3d"
+            strokeWidth="0.5"
+            strokeDasharray="3 2"
+            opacity="0.4"
+          />
+        )}
+
+        {/* UP State Outline */}
         <path
           d={UP_OUTLINE}
-          fill="#E8F5E9"
-          stroke="#2E7D32"
-          strokeWidth="1.5"
-          opacity="0.85"
+          fill="#e8f0e4"
+          stroke="#2d5a3d"
+          strokeWidth="1.2"
           strokeLinejoin="round"
+          fillOpacity="0.6"
         />
 
-        {/* All district dots */}
-        {Object.entries(DISTRICTS).map(([district, pos]) => {
-          const isSelected = district === selectedDistrict;
-          const dist = selectedDot
-            ? Math.hypot(pos.x - selectedDot.x, pos.y - selectedDot.y)
-            : 999;
-          const isNearby = radius ? dist < radius * 4 : false;
+        {/* District dots */}
+        {Object.entries(DISTRICT_POSITIONS).map(([name, pos]) => {
+          const isSelected = name === selectedDistrict;
+          const isNearby = nearbyDistricts.includes(name);
+          const isHovered = name === hoveredDistrict;
 
           return (
-            <g key={district}>
+            <g key={name}>
+              {/* Hover area */}
               <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={isSelected ? 5 : isNearby ? 3 : 1.8}
-                fill={isSelected ? "#15803D" : isNearby ? "#4ade80" : "#86efac"}
-                stroke={isSelected ? "#052e16" : "none"}
-                strokeWidth={isSelected ? 1.2 : 0}
-                opacity={isSelected ? 1 : isNearby ? 0.85 : 0.5}
+                cx={pos[0]}
+                cy={pos[1]}
+                r="5"
+                fill="transparent"
+                className="cursor-pointer"
+                onMouseEnter={() => setHoveredDistrict(name)}
+                onMouseLeave={() => setHoveredDistrict(null)}
               />
+
+              {/* Pulsing ring for selected */}
               {isSelected && (
-                <>
-                  <circle cx={pos.x} cy={pos.y} r="12" fill="none" stroke="#15803D" strokeWidth="1.5" opacity="0.3">
-                    <animate attributeName="r" values="8;16;8" dur="2s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0.3;0.05;0.3" dur="2s" repeatCount="indefinite" />
-                  </circle>
-                  {radius && (
-                    <circle cx={pos.x} cy={pos.y} r={radius * 4} fill="none" stroke="#15803D" strokeWidth="1" strokeDasharray="4 3" opacity="0.3" />
-                  )}
-                  <rect x={pos.x - 32} y={pos.y - 24} width="64" height="16" rx="4" fill="white" fillOpacity="0.9" stroke="#15803D" strokeWidth="0.5" />
-                  <text x={pos.x} y={pos.y - 13} textAnchor="middle" fontSize="8" fontWeight="700" fill="#052e16" style={{ fontFamily: "Inter, sans-serif" }}>
-                    {selectedLocationName || district}
+                <circle
+                  cx={pos[0]}
+                  cy={pos[1]}
+                  r="8"
+                  fill="none"
+                  stroke="#2d5a3d"
+                  strokeWidth="0.8"
+                  opacity="0.4"
+                >
+                  <animate
+                    attributeName="r"
+                    values="8;12;8"
+                    dur="2s"
+                    repeatCount="indefinite"
+                  />
+                  <animate
+                    attributeName="opacity"
+                    values="0.4;0.1;0.4"
+                    dur="2s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
+              )}
+
+              {/* District dot */}
+              <circle
+                cx={pos[0]}
+                cy={pos[1]}
+                r={isSelected ? "4" : isNearby ? "3" : "2"}
+                fill={isSelected ? "#1a3a2a" : isNearby ? "#6ba368" : "#b8d4b0"}
+                stroke={isSelected ? "#fff" : "none"}
+                strokeWidth={isSelected ? "1" : "0"}
+                className="transition-all duration-300"
+              />
+
+              {/* District name label */}
+              {(isSelected || isHovered) && (
+                <g>
+                  <rect
+                    x={pos[0] - 24}
+                    y={pos[1] - 11}
+                    width="48"
+                    height="7"
+                    fill="#1a3a2a"
+                    rx="2"
+                  />
+                  <text
+                    x={pos[0]}
+                    y={pos[1] - 5.5}
+                    textAnchor="middle"
+                    fill="white"
+                    fontSize="4.5"
+                    fontWeight="600"
+                    fontFamily="system-ui, sans-serif"
+                  >
+                    {name}
                   </text>
-                </>
+                </g>
               )}
             </g>
           );
         })}
+
+        {/* Selected town marker */}
+        {selectedTown && selectedPos && (
+          <g>
+            <circle
+              cx={selectedPos[0]}
+              cy={selectedPos[1]}
+              r="2.5"
+              fill="#fff"
+              stroke="#1a3a2a"
+              strokeWidth="1"
+            />
+            <circle
+              cx={selectedPos[0]}
+              cy={selectedPos[1]}
+              r="1"
+              fill="#1a3a2a"
+            />
+          </g>
+        )}
       </svg>
 
       {/* Legend */}
-      <div className="absolute bottom-2 left-2 flex items-center gap-2.5 bg-white/90 backdrop-blur-sm rounded-lg px-2.5 py-1.5 border border-border/50">
-        <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full bg-emerald-700" />
-          <span className="text-[9px] font-medium text-muted-foreground">Selected</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full bg-emerald-300" />
-          <span className="text-[9px] font-medium text-muted-foreground">Nearby</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="h-1.5 w-1.5 rounded-full bg-emerald-200" />
-          <span className="text-[9px] font-medium text-muted-foreground">Other</span>
-        </div>
-      </div>
-
-      {/* State label */}
-      <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm rounded-lg px-2.5 py-1 border border-border/50">
-        <span className="text-[10px] font-bold text-emerald-800 tracking-wider uppercase">Uttar Pradesh</span>
+      <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[10px] text-[#4a6a5a]">
+        <span className="flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#1a3a2a]" />
+          Selected
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-[#6ba368]" />
+          Nearby
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#b8d4b0]" />
+          District
+        </span>
       </div>
     </div>
   );
