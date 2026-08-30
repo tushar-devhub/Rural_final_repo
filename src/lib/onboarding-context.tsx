@@ -1,7 +1,11 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 import type { Location } from "@/data/locations";
 import type { BusinessCategory } from "@/data/businesses";
 import type { FeasibilityData } from "@/data/feasibility-types";
+import type { DemoScenario } from "@/data/demos";
+import { locations } from "@/data/locations";
+import { businessCategories } from "@/data/businesses";
+import { generateFeasibility } from "@/data/feasibility";
 
 interface OnboardingState {
   location: Location | null;
@@ -20,6 +24,7 @@ interface OnboardingContextType extends OnboardingState {
   setFeasibility: (f: FeasibilityData | null) => void;
   setIsAnalyzing: (a: boolean) => void;
   reset: () => void;
+  loadDemo: (demo: DemoScenario) => void;
 }
 
 const defaultState: OnboardingState = {
@@ -50,6 +55,20 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, isAnalyzing }));
   const reset = () => setState(defaultState);
 
+  const loadDemo = useCallback((demo: DemoScenario) => {
+    const loc = locations.find((l) => l.id === demo.locationId) || locations[0];
+    const biz = businessCategories.find((b) => b.id === demo.businessId) || businessCategories[0];
+    const feasibility = generateFeasibility(demo.businessId, demo.capital, demo.locationId);
+    setState({
+      location: loc,
+      radius: 5,
+      business: biz,
+      capital: demo.capital,
+      feasibility,
+      isAnalyzing: false,
+    });
+  }, []);
+
   return (
     <OnboardingContext.Provider
       value={{
@@ -61,6 +80,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         setFeasibility,
         setIsAnalyzing,
         reset,
+        loadDemo,
       }}
     >
       {children}

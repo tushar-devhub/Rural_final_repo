@@ -71,7 +71,7 @@ export function Footer() {
                 hello@ruralbiz.ai
               </li>
               <li className="text-sm text-primary-foreground/70">
-                Helpline: 1800-XXX-XXXX
+                Demo Helpline: 1800-XXX-XXXX
               </li>
             </ul>
           </div>
