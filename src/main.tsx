@@ -8,6 +8,7 @@ import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
+import { OnboardingProvider } from "./lib/onboarding-context";
 
 // Lazy load route components
 const Landing = lazy(() => import("./pages/Landing.tsx"));
@@ -86,11 +87,7 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
-import { OnboardingProvider } from "./lib/onboarding-context";
 
-function OnboardingProviderWrapper({ children }: { children: React.ReactNode }) {
-  return <OnboardingProvider>{children}</OnboardingProvider>;
-}
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -126,7 +123,7 @@ createRoot(document.getElementById("root")!).render(
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
           <RouteSyncer />
-          <OnboardingProviderWrapper>
+          <OnboardingProvider>
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Landing />} />
@@ -152,7 +149,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
-          </OnboardingProviderWrapper>
+          </OnboardingProvider>
         </BrowserRouter>
         <Toaster />
       </ConvexAuthProvider>

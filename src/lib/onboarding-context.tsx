@@ -88,10 +88,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   );
 }
 
+const defaultContextValue: OnboardingContextType = {
+  ...defaultState,
+  setLocation: () => {},
+  setRadius: () => {},
+  setBusiness: () => {},
+  setCapital: () => {},
+  setFeasibility: () => {},
+  setIsAnalyzing: () => {},
+  reset: () => {},
+  loadDemo: () => {},
+};
+
 export function useOnboarding() {
-  const ctx = useContext(OnboardingContext);
-  if (!ctx) {
-    throw new Error("useOnboarding must be used within OnboardingProvider");
-  }
-  return ctx;
+  return useContext(OnboardingContext) ?? defaultContextValue;
 }
