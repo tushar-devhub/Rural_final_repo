@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 import { OnboardingProvider } from "./lib/onboarding-context";
+import { VoiceAssistant } from "./components/VoiceAssistant";
 
 // Lazy load route components
 const Landing = lazy(() => import("./pages/Landing.tsx"));
@@ -150,6 +151,7 @@ createRoot(document.getElementById("root")!).render(
             </Routes>
           </Suspense>
           </OnboardingProvider>
+          <VoiceAssistant />
         </BrowserRouter>
         <Toaster />
       </ConvexAuthProvider>
