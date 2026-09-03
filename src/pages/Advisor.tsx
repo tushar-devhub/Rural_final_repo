@@ -37,7 +37,7 @@ const DEFAULT_SUGGESTIONS: string[] = [
 
 export default function Advisor() {
   const {
-    feasibility, location, business, capital,
+    feasibility, location, business, capital, radius,
     setLocation, setBusiness, setCapital, setFeasibility,
   } = useOnboarding();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -72,7 +72,7 @@ export default function Advisor() {
 
     const reply = generateAdvisorReply({
       message: question,
-      context: { location, business, capital, feasibility },
+      context: { location, business, capital, feasibility, radius },
     });
 
     // Sync asserted changes into shared context (single source of truth)
@@ -83,7 +83,7 @@ export default function Advisor() {
       const b = reply.apply.business ?? business;
       const c = reply.apply.capital !== undefined ? reply.apply.capital : capital;
       const l = reply.apply.location ?? location;
-      const f = runFeasibility(b, c, l);
+      const f = runFeasibility(b, c, l, radius);
       if (f) setFeasibility(f);
     }
 

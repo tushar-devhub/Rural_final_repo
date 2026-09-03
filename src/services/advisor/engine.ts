@@ -32,6 +32,8 @@ export interface AdvisorContext {
   business: BusinessCategory | null;
   capital: number;
   feasibility: FeasibilityData | null;
+  /** Analysis radius (km) chosen for the current analysis. */
+  radius?: number;
 }
 
 export interface AdvisorRequest {
@@ -107,10 +109,11 @@ export function runFeasibility(
   business: BusinessCategory | null,
   capital: number,
   location: Location | null,
+  radiusKm = 5,
 ): FeasibilityData | null {
   if (!business || !location || !capital || capital <= 0) return null;
   try {
-    return generateFeasibility(business.id, capital, location.id);
+    return generateFeasibility(business.id, capital, location.id, radiusKm);
   } catch {
     return null;
   }
@@ -131,13 +134,13 @@ function feasibilityForScenario(
   const business = overrides.business ?? ctx.business;
   const capital = overrides.capital ?? ctx.capital;
   const location = overrides.location ?? ctx.location;
-  return { business, capital, location, feasibility: runFeasibility(business, capital, location) };
+  return { business, capital, location, feasibility: runFeasibility(business, capital, location, ctx.radius ?? 5) };
 }
 
-function topRankedBusinesses(capital: number, location: Location): { business: BusinessCategory; feasibility: FeasibilityData }[] {
+function topRankedBusinesses(capital: number, location: Location, radiusKm = 5): { business: BusinessCategory; feasibility: FeasibilityData }[] {
   return businessCategories
     .filter((b) => b.id !== "other")
-    .map((b) => ({ business: b, feasibility: generateFeasibility(b.id, capital, location.id) }))
+    .map((b) => ({ business: b, feasibility: generateFeasibility(b.id, capital, location.id, radiusKm) }))
     .sort((a, b) => b.feasibility.overallScore - a.feasibility.overallScore);
 }
 
@@ -200,8 +203,8 @@ function buildAnalyzeAnswer(
   return `${firstPart}\n\n${mid}`;
 }
 
-function buildRecommendAnswer(lang: AdvisorLang, capital: number, location: Location): { text: string; followups: string[] } {
-  const ranked = topRankedBusinesses(capital, location);
+function buildRecommendAnswer(lang: AdvisorLang, capital: number, location: Location, radiusKm = 5): { text: string; followups: string[] } {
+  const ranked = topRankedBusinesses(capital, location, radiusKm);
   const top = ranked.slice(0, 3);
   const best = top[0];
 
@@ -225,8 +228,8 @@ function buildRecommendAnswer(lang: AdvisorLang, capital: number, location: Loca
   return { text, followups: top.slice(0, 2).map((t) => pick(lang, `${t.business.name} का analysis करो`, `${t.business.name} ka analysis karo`, `Run analysis for ${t.business.name}`)) };
 }
 
-function buildCompareAnswer(lang: AdvisorLang, capital: number, location: Location, businessList: BusinessCategory[]): string {
-  const rows = businessList.slice(0, 3).map((b) => ({ b, f: generateFeasibility(b.id, capital, location.id) }));
+function buildCompareAnswer(lang: AdvisorLang, capital: number, location: Location, businessList: BusinessCategory[], radiusKm = 5): string {
+  const rows = businessList.slice(0, 3).map((b) => ({ b, f: generateFeasibility(b.id, capital, location.id, radiusKm) }));
   const winner = [...rows].sort((a, b) => b.f.overallScore - a.f.overallScore)[0];
 
   const lines = rows.map((r) => {
@@ -569,7 +572,7 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
     const biz = businesses[0] ?? context.business;
     const cap = capital ?? context.capital;
     const loc = mentionedLocation ?? context.location;
-    const f = runFeasibility(biz, cap, loc);
+    const f = runFeasibility(biz, cap, loc, context.radius ?? 5);
     if (f && biz && loc) {
       return {
         text: buildAnalyzeAnswer(lang, loc, biz, cap, f, true),
@@ -609,7 +612,7 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
 
   // Compare two or more named businesses
   if (businesses.length >= 2 && context.location && context.capital > 0) {
-    return { text: buildCompareAnswer(lang, context.capital, context.location, businesses), followups: [], suggestPage: "/compare" };
+    return { text: buildCompareAnswer(lang, context.capital, context.location, businesses, context.radius ?? 5), followups: [], suggestPage: "/compare" };
   }
   if (businesses.length >= 2) {
     return {
@@ -634,7 +637,7 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
     const loc = mentionedLocation ?? context.location;
     const cap = capital ?? context.capital;
     if (loc && cap > 0) {
-      const r = buildRecommendAnswer(lang, cap, loc);
+      const r = buildRecommendAnswer(lang, cap, loc, context.radius ?? 5);
       return { text: r.text, followups: r.followups };
     }
     if (!loc) {
@@ -786,7 +789,7 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
           followups: ["₹50,000", "₹1 lakh", "₹2 lakh", "₹5 lakh"],
         };
       }
-      const ranked = topRankedBusinesses(targetCap, targetLoc);
+      const ranked = topRankedBusinesses(targetCap, targetLoc, context.radius ?? 5);
       const top = ranked.slice(0, 3);
       return {
         text: pick(

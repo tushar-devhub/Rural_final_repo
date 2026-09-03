@@ -35,7 +35,7 @@ const QUICK_AMOUNTS = [
   { label: "₹5L", value: 500000 },
 ];
 
-const RADIUS_OPTIONS = [5, 10];
+const RADIUS_OPTIONS = [5, 10, 15, 25];
 
 function OnboardingInner() {
   const [step, setStep] = useState(0);
@@ -96,11 +96,11 @@ function OnboardingInner() {
     if (!business || !location) return;
     setIsAnalyzing(true);
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    const feasibility = generateFeasibility(business.id, capital, location.id);
+    const feasibility = generateFeasibility(business.id, capital, location.id, radius);
     setFeasibility(feasibility);
     setIsAnalyzing(false);
     navigate("/dashboard");
-  }, [business, location, capital, navigate, setFeasibility, setIsAnalyzing]);
+  }, [business, location, capital, radius, navigate, setFeasibility, setIsAnalyzing]);
 
   if (isAnalyzing) {
     return <AnalysisLoader businessName={business?.name || "Your business"} locationName={location?.name || ""} />;
@@ -410,26 +410,57 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
         className="h-72 sm:h-80 mb-2"
       />
 
-      {/* Boundary status row */}
+      {/* Selected location info card */}
       {selected && (
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px]">
-          <span className="inline-flex items-center gap-1.5 font-medium text-[#1a3a2a]">
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-            {selected.name} · {selected.district}, {selected.state} · PIN {selected.pincode}
-          </span>
+        <div className="mb-3 rounded-xl border border-border bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                <p className="text-sm font-bold text-foreground truncate">{selected.name}</p>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary flex-shrink-0">
+                  {selected.type}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">{selected.district}, {selected.state}</p>
+            </div>
+            <span className="rounded-lg bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground whitespace-nowrap">
+              PIN {selected.pincode}
+            </span>
+          </div>
+
+          <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-border/60 pt-2.5">
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">District</p>
+              <p className="text-xs font-bold text-foreground truncate mt-0.5">{selected.district}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Analysis area</p>
+              <p className="text-xs font-bold text-foreground mt-0.5">{radius} km radius</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Nearby districts</p>
+              <p className="text-xs font-bold text-foreground mt-0.5">
+                {boundary.status === "ready" && boundary.feature ? boundary.neighbors.length : "…"}
+              </p>
+            </div>
+          </div>
+
           {boundary.status === "loading" && (
-            <span className="inline-flex items-center gap-1 text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              {boundary.progress != null && boundary.progress > 0 ? `Loading district boundary… ${boundary.progress}%` : "Finding district boundary…"}
-            </span>
+            <p className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground border-t border-border/60 pt-2">
+              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              {boundary.progress != null && boundary.progress > 0
+                ? `Loading district boundary… ${boundary.progress}%`
+                : "Finding district boundary…"}
+            </p>
           )}
-          {boundary.status === "ready" && boundary.feature && (
-            <span className="text-muted-foreground">
-              {boundary.neighbors.length} nearby districts {boundary.viaContainment ? "· " + boundary.note : ""}
-            </span>
+          {boundary.status === "ready" && boundary.feature && boundary.viaContainment && (
+            <p className="mt-2 text-[10px] text-muted-foreground border-t border-border/60 pt-2">{boundary.note}</p>
           )}
           {boundary.status === "error" && (
-            <span className="text-amber-600">District boundary unavailable — marker &amp; radius still shown</span>
+            <p className="mt-2 text-[10px] text-amber-600 border-t border-border/60 pt-2">
+              District boundary unavailable — marker &amp; radius still shown
+            </p>
           )}
         </div>
       )}

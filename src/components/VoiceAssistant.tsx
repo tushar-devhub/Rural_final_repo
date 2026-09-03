@@ -87,7 +87,7 @@ export function VoiceAssistant() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const {
-    location, business, capital, feasibility,
+    location, business, capital, feasibility, radius,
     setLocation, setBusiness, setCapital, setFeasibility,
   } = useOnboarding();
 
@@ -146,7 +146,7 @@ export function VoiceAssistant() {
     try {
       const reply = generateAdvisorReply({
         message: text,
-        context: { location, business, capital, feasibility },
+        context: { location, business, capital, feasibility, radius },
       });
 
       // Sync asserted changes into the shared onboarding context

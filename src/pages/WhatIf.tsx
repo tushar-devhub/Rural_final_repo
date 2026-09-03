@@ -30,7 +30,7 @@ const QUICK_AMOUNTS = [
 ];
 
 export default function WhatIf() {
-  const { feasibility: currentFeasibility, location: currentLocation, business: currentBusiness, capital: currentCapital } = useOnboarding();
+  const { feasibility: currentFeasibility, location: currentLocation, business: currentBusiness, capital: currentCapital, radius: currentRadius } = useOnboarding();
 
   const [newCapital, setNewCapital] = useState(currentCapital);
   const [newBusinessId, setNewBusinessId] = useState(currentBusiness?.id || "dairy");
@@ -44,10 +44,10 @@ export default function WhatIf() {
   const handleCompare = useCallback(async () => {
     setIsComparing(true);
     await new Promise((r) => setTimeout(r, 800));
-    const result = generateFeasibility(newBusinessId, newCapital, newLocationId);
+    const result = generateFeasibility(newBusinessId, newCapital, newLocationId, currentRadius);
     setNewFeasibility(result);
     setIsComparing(false);
-  }, [newBusinessId, newCapital, newLocationId]);
+  }, [newBusinessId, newCapital, newLocationId, currentRadius]);
 
   const handleReset = () => {
     setNewCapital(currentCapital);
