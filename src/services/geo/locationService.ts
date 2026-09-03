@@ -7,6 +7,7 @@
 
 import { loadPincodeData, PINCODE_DATA_URL, type GeoPlace } from "./pincodeData";
 import { loadPinIndex, PIN_INDEX_URL } from "./pinIndex";
+import { lookupPin, type PinOffice } from "./pinApi";
 import { locations, upsertLocation, type Location } from "@/data/locations";
 import { searchPlaces, popularSuggestions, findNearestPlaces } from "./placeSearch";
 import { estimateDemographics } from "./demographics";
@@ -57,6 +58,95 @@ export function getDetailState(): DetailLoadState {
 /** The most complete directory layer currently available (never blocks). */
 function activeDirectory(): GeoPlace[] {
   return placesCache ?? pinCache ?? [];
+}
+
+/** Find a calibrated curated Location by place name (+district) for dedupe. */
+function curatedByName(name: string, district: string): Location | null {
+  const n = normName(name);
+  const d = normName(district);
+  return (
+    locations.find((l) => normName(l.name) === n && normName(l.district) === d) ??
+    locations.find((l) => normName(l.name) === n) ??
+    null
+  );
+}
+
+// Lazy pin → directory head map (built once from the loaded local index) used
+// only as a REAL-coordinate fallback when an online office lacks coordinates.
+let coordIndex: Map<string, GeoPlace> | null = null;
+function coordForPin(pin: string): GeoPlace | undefined {
+  if (!coordIndex) {
+    coordIndex = new Map();
+    for (const p of pinCache ?? []) {
+      if (!p.hasCoords) continue;
+      if (!coordIndex.has(p.pincode)) coordIndex.set(p.pincode, p);
+    }
+  }
+  return coordIndex.get(pin);
+}
+
+/** Convert one online PIN-office record into a selectable location hit. */
+function hitFromPinOffice(o: PinOffice): LocationHit | null {
+  const fallback = coordForPin(o.pincode);
+  const lat = o.lat ?? fallback?.lat;
+  const lng = o.lng ?? fallback?.lng;
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs((lat ?? 0) + (lng ?? 0)) > 0.05;
+  const name = o.name || o.pincode;
+  const district = o.district || fallback?.district || "";
+  const state = o.state || fallback?.state || "";
+  if (!district || !state) return null;
+
+  // Calibrated demo towns win over their directory twin (consistent data).
+  const curated = curatedByName(name, district);
+  if (curated) return hitFromLocation(curated);
+
+  const geo: GeoPlace = {
+    pincode: o.pincode,
+    name,
+    rawName: o.name || name,
+    officeType: o.officeType,
+    delivery: o.delivery,
+    district,
+    state,
+    region: o.region ?? null,
+    division: o.division ?? null,
+    lat: hasCoords ? (lat as number) : 0,
+    lng: hasCoords ? (lng as number) : 0,
+    hasCoords,
+  };
+  return hitFromPlace(geo);
+}
+
+/**
+ * Online six-digit PIN search. Independent of the local dataset: fires a
+ * targeted API request, returns selectable hits (with real coordinates from
+ * the API or, failing that, the local directory head — never fabricated).
+ */
+const OFFICE_RANK: Record<string, number> = { HO: 0, GPO: 0, SO: 1, PO: 2, BO: 3 };
+
+/** Sort offices so head/sub offices (which carry sane coords) come first. */
+function rankOffices(offices: PinOffice[]): PinOffice[] {
+  const rank = (o: PinOffice) => OFFICE_RANK[String(o.officeType).toUpperCase()] ?? 9;
+  return [...offices].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * Online six-digit PIN search. Independent of the local dataset: fires a
+ * targeted API request, returns selectable hits (with real coordinates from
+ * the API or, failing that, the local directory head — never fabricated).
+ */
+export async function searchPinOnline(pin: string): Promise<LocationHit[]> {
+  const offices = rankOffices(await lookupPin(pin));
+  const hits: LocationHit[] = [];
+  const seen = new Set<string>();
+  for (const o of offices) {
+    const hit = hitFromPinOffice(o);
+    if (!hit) continue;
+    if (seen.has(hit.key)) continue;
+    seen.add(hit.key);
+    hits.push(hit);
+  }
+  return hits;
 }
 
 /** GeoPlace adapter for calibrated curated towns. */

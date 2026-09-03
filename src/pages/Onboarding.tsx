@@ -10,10 +10,11 @@ import { formatIndianCurrency } from "@/data/assessment";
 import { getRecommendations } from "@/data/recommendations";
 import IndiaMap from "@/components/IndiaMap";
 import {
-  initLocationService, searchLocations, suggestLocations, curatedSuggestions, nearestLocations, registerHit,
+  initLocationService, searchLocations, searchPinOnline, suggestLocations, curatedSuggestions, nearestLocations, registerHit,
   getDetailState, type DetailLoadState,
   getLoadState, type LocationHit, type GeoLoadState,
 } from "@/services/geo/locationService";
+import { isPinQuery, PinLookupError } from "@/services/geo/pinApi";
 import { loadDistrictBoundaries, resolveDistrict, adjacentDistricts, type DistrictFeature } from "@/services/geo/boundaries";
 import {
   MapPin, Search, Store, Lightbulb, IndianRupee,
@@ -211,6 +212,9 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
   const [hits, setHits] = useState<LocationHit[]>([]);
   const [geo, setGeo] = useState<GeoLoadState>(getLoadState());
   const [detail, setDetail] = useState<DetailLoadState>(getDetailState());
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinTick, setPinTick] = useState(0);
   const [pickNote, setPickNote] = useState<string | null>(null);
   const [boundary, setBoundary] = useState<BoundaryState>({ status: "idle", feature: null, neighbors: [] });
   const [reloadKey, setReloadKey] = useState(0);
@@ -250,9 +254,10 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
     };
   }, [reloadKey]);
 
-  // ── debounced nationwide search ──
+  // ── debounced nationwide (text) search — never fires for PIN queries ──
   useEffect(() => {
     const q = query.trim();
+    if (isPinQuery(q)) return; // handled by the online PIN effect below
     if (!q) {
       setHits(geo.status === "ready" ? suggestLocations(10) : curatedSuggestions(8));
       return;
@@ -268,6 +273,38 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
     const t = setTimeout(() => setHits(searchLocations(q, 18)), 180);
     return () => clearTimeout(t);
   }, [query, geo.status]);
+
+  // ── exact six-digit PIN → targeted online lookup (never blocks on dataset) ──
+  useEffect(() => {
+    const q = query.trim();
+    if (!isPinQuery(q)) {
+      setPinBusy(false);
+      setPinError(null);
+      return;
+    }
+    let cancelled = false;
+    setPinBusy(true);
+    setPinError(null);
+    searchPinOnline(q)
+      .then((hits) => {
+        if (!cancelled) setHits(hits);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setHits([]);
+        setPinError(
+          err instanceof PinLookupError && err.kind === "busy"
+            ? "Location search is temporarily busy. Please try again."
+            : "Unable to search this PIN code right now. Please try again.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setPinBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query, pinTick]);
 
   // ── real district boundary resolution for the selected location ──
   const locKey = selected ? `${selected.id}|${selected.lat}|${selected.lng}` : "";
@@ -374,7 +411,7 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             // Enter on a full PIN (or a single strong hit) places it on the map directly.
-            if (e.key === "Enter" && hits.length > 0) {
+            if (e.key === "Enter" && hits.length > 0 && !pinBusy && !pinError) {
               const q = query.trim();
               if (/^\d{6}$/.test(q) || hits.length === 1) {
                 e.preventDefault();
@@ -394,8 +431,8 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
         )}
       </div>
 
-      {/* dataset status */}
-      {datasetLoading && (
+      {/* dataset status — text-search layer only; never shown for PIN queries */}
+      {!isPinQuery(query.trim()) && datasetLoading && (
         <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground">
           <Loader2 className="h-4 w-4 text-primary animate-spin" />
           <span className="flex-1">Loading location index — search will be ready in a moment…</span>
@@ -404,7 +441,7 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
           )}
         </div>
       )}
-      {datasetError && (
+      {!isPinQuery(query.trim()) && datasetError && (
         <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
           <span className="flex-1">Location data could not be loaded. Showing demo towns only.</span>
@@ -414,12 +451,12 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
           </button>
         </div>
       )}
-      {geo.status === "ready" && (
+      {!isPinQuery(query.trim()) && geo.status === "ready" && (
         <p className="mb-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Database className="h-3 w-3" />
           {geo.total.toLocaleString("en-IN")} PIN locations indexed across India
           <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">
-            search v3
+            search v4
           </span>
           {detail.status === "loading" && (
             <span className="inline-flex items-center gap-1 text-primary/80">
@@ -505,6 +542,9 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
           <p className="text-xs font-semibold text-muted-foreground">
             {query.trim() ? "Search results" : "Suggested locations"}
           </p>
+          {isPinQuery(query.trim()) && (
+            <p className="text-[10px] text-muted-foreground">online PIN lookup</p>
+          )}
           {!query.trim() && geo.status === "ready" && (
             <p className="text-[10px] text-muted-foreground">Try “242001”, “Shahjahanpur”, “Mumbai”…</p>
           )}
@@ -540,11 +580,33 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
           ))}
           {hits.length === 0 && (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-              {datasetError
-                ? "No matching demo town. Try a different spelling or PIN code."
-                : datasetLoading
-                  ? "Indexing locations…"
-                  : "No matching Indian location found. Try a different spelling or PIN code."}
+              {isPinQuery(query.trim()) ? (
+                pinBusy ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                    Searching this PIN code…
+                  </span>
+                ) : pinError ? (
+                  <span className="flex flex-col items-center gap-2">
+                    {pinError}
+                    <button
+                      onClick={() => setPinTick((t) => t + 1)}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-4 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Try again
+                    </button>
+                  </span>
+                ) : (
+                  "No locations found for this PIN code."
+                )
+              ) : datasetError ? (
+                "No matching demo town. Try a different spelling or PIN code."
+              ) : datasetLoading ? (
+                "Indexing locations…"
+              ) : (
+                "No matching Indian location found. Try a different spelling or PIN code."
+              )}
             </div>
           )}
         </div>
