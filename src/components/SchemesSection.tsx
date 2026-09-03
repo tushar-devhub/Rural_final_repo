@@ -51,11 +51,23 @@ function LevelChip({ level }: { level: SchemeMatch["level"] }) {
 
 function MatchCard({ m, highlighted, onOpen }: { m: SchemeMatch; highlighted?: boolean; onOpen: (id: string) => void }) {
   const reasons = m.reasons.slice(0, 2);
+  const open = () => onOpen(m.scheme.id);
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`${m.scheme.name} — ${LEVEL_META[m.level].label}. Open scheme details`}
+      title="Open scheme details"
+      onClick={open}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
+        }
+      }}
       className={cn(
-        "rounded-2xl border p-4 sm:p-5 transition-all hover:shadow-sm flex flex-col gap-3",
-        highlighted ? "border-primary/30 bg-primary/[0.03] ring-1 ring-primary/10" : "border-border bg-white",
+        "group cursor-pointer rounded-2xl border p-4 sm:p-5 transition-all hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col gap-3",
+        highlighted ? "border-primary/30 bg-primary/[0.03] ring-1 ring-primary/10" : "border-border bg-white hover:border-primary/30",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -76,12 +88,9 @@ function MatchCard({ m, highlighted, onOpen }: { m: SchemeMatch; highlighted?: b
           {m.percent}% of evaluated criteria
         </span>
         <span className="flex-1" />
-        <button
-          onClick={() => onOpen(m.scheme.id)}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
-        >
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary group-hover:gap-1.5 transition-all">
           View details <ArrowRight className="h-3 w-3" />
-        </button>
+        </span>
       </div>
 
       <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 h-6 overflow-hidden">
@@ -118,6 +127,75 @@ function MatchCard({ m, highlighted, onOpen }: { m: SchemeMatch; highlighted?: b
         <p className="text-[11px] text-muted-foreground leading-snug">
           <span className="font-semibold text-foreground/70">Why not ranked higher: </span>
           {m.exclusions[0].text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ─── Official source link (robust open + copy fallback) ─── */
+
+function OfficialSourceLink({ url }: { url: string }) {
+  const [status, setStatus] = useState<"idle" | "copied" | "blocked">("idle");
+
+  const copyRaw = () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    navigator.clipboard.writeText(url).catch(() => {});
+  };
+
+  const handleOpen = () => {
+    let opened = false;
+    try {
+      // Some embedded previews block new tabs; detect that and fall back to copy.
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      opened = !!win;
+    } catch {
+      opened = false;
+    }
+    if (!opened) {
+      copyRaw();
+      setStatus("blocked");
+      window.setTimeout(() => setStatus((s) => (s === "blocked" ? "idle" : s)), 6000);
+    }
+  };
+
+  const handleCopy = () => {
+    copyRaw();
+    setStatus("copied");
+    window.setTimeout(() => setStatus((s) => (s === "copied" ? "idle" : s)), 2200);
+  };
+
+  return (
+    <div className="mt-2.5 rounded-lg border border-border bg-muted/40 p-3">
+      <p className="text-[10px] leading-snug text-muted-foreground break-all font-mono">{url}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          <ExternalLink className="h-3 w-3" />
+          Open official page
+        </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-muted transition-colors"
+        >
+          {status === "copied" ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+          {status === "copied" ? "Copied" : "Copy link"}
+        </button>
+      </div>
+      {status === "blocked" && (
+        <p className="mt-2 flex items-start gap-1.5 text-[10px] font-medium text-amber-700 leading-snug">
+          <Info className="h-3 w-3 flex-shrink-0 mt-px" />
+          This preview could not open the page automatically — the official link has been copied. Paste it in your browser.
+        </p>
+      )}
+      {status === "copied" && (
+        <p className="mt-2 flex items-start gap-1.5 text-[10px] font-medium text-emerald-700 leading-snug">
+          <Check className="h-3 w-3 flex-shrink-0 mt-px" />
+          Official link copied to clipboard.
         </p>
       )}
     </div>
@@ -272,14 +350,7 @@ function SchemeDetailDialog({
           <p className="text-xs text-muted-foreground leading-relaxed">
             <span className="font-bold text-foreground/80">Source: </span>{s.officialSource.name}
           </p>
-          <a
-            href={s.officialSource.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-          >
-            Verify current details on the official source <ExternalLink className="h-3 w-3" />
-          </a>
+          <OfficialSourceLink url={s.officialSource.url} />
           <p className="mt-2 text-[11px] text-muted-foreground leading-relaxed">
             <span className="font-semibold">Note: </span>{s.note} RuralBiz's match is preliminary — it is not an approval or an eligibility certificate.
           </p>

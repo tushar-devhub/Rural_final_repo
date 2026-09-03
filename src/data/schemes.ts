@@ -327,10 +327,10 @@ export const governmentSchemes: GovernmentScheme[] = [
       "Approval and disbursal follow bank and KVIC formalities",
     ],
     officialSource: {
-      name: "PMEGP — KVIC Online Portal",
-      url: "https://www.kviconline.gov.in/pmegpeportal/pmegphome/index.jsp",
+      name: "PMEGP — Official MSME Portal",
+      url: "https://pmegp.msme.gov.in/Home/HomePage",
     },
-    note: "Subsidy percentages and ceilings are periodically revised — always confirm the current guidelines with KVIC or the District Industries Centre.",
+    note: "Applications are submitted through the KVIC/KVIB portal (kviconline.gov.in). Subsidy percentages and ceilings are periodically revised — always confirm the current guidelines with KVIC or the District Industries Centre.",
   },
 
   {
