@@ -9,6 +9,7 @@ export function generateFeasibility(
   businessId: string,
   capital: number,
   locationId: string,
+  radiusKm = 5,
 ): FeasibilityData {
   // Get location data
   const location = locations.find((l) => l.id === locationId) || locations[0];
@@ -17,14 +18,14 @@ export function generateFeasibility(
   const marketReach = analyzeMarketReach(
     location.population,
     location.households,
-    5, // default radius
+    radiusKm,
     businessId,
   );
 
   const opportunity = analyzeOpportunity(businessId, locationId);
   const swot = generateSWOT(businessId, locationId, capital);
   const risks = identifyRisks(businessId, locationId, capital);
-  const competition = mapCompetitors(businessId, locationId, 5);
+  const competition = mapCompetitors(businessId, locationId, radiusKm);
   const pricing = analyzePricing(businessId, locationId);
 
   // ─── Financial Engine ───
@@ -39,7 +40,7 @@ export function generateFeasibility(
     capital,
     location.population,
     location.households,
-    5,
+    radiusKm,
   );
 
   // ─── Overall Score ───

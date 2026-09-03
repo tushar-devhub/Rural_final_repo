@@ -1,5 +1,9 @@
+import { useMemo } from "react";
 import { useOnboarding } from "@/lib/onboarding-context";
 import { formatIndianCurrency, getSeverityColor, getVerdictColor, getVerdictBg, getVerdictIcon } from "@/data/assessment";
+import type { Location } from "@/data/locations";
+import IndiaMap, { type MapPoint } from "@/components/IndiaMap";
+import { hashString, offsetKm } from "@/services/geo/geoUtils";
 import { DataConfidenceBadge } from "@/components/ui/DataConfidenceBadge";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -98,7 +102,7 @@ export default function Dashboard() {
           {/* ── Risks + Competition ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <RisksSection f={f} />
-            <CompetitionSection f={f} />
+            <CompetitionSection f={f} location={location} radius={radius} />
           </div>
 
           {/* ── Pricing ── */}
@@ -529,34 +533,61 @@ function RisksSection({ f }: { f: any }) {
 }
 
 /* ═══ COMPETITION ═══ */
-function CompetitionSection({ f }: { f: any }) {
+
+/**
+ * Deterministically place the (estimated) competitor set on a real map:
+ * each competitor keeps its reported distance from the selected location and
+ * gets a stable bearing derived from its name — so the layout is consistent
+ * for a given location and changes plausibly when the location changes.
+ */
+function competitorPoints(
+  location: Location | null,
+  competitors: { name: string; type: string; distance: string }[],
+): MapPoint[] {
+  if (!location || !Number.isFinite(location.lat) || !Number.isFinite(location.lng)) return [];
+  return competitors.map((c, i) => {
+    const parsed = parseFloat(c.distance);
+    const km = Number.isFinite(parsed) && parsed > 0 ? parsed : 0.3 + (i % 6) * 0.4;
+    const bearing = hashString(`${location.id}|${c.name}|${c.type}`) % 360;
+    const [lat, lng] = offsetKm(location.lat, location.lng, bearing, km);
+    return { lat, lng, label: c.name, sublabel: `${c.type} · ${c.distance}` };
+  });
+}
+
+function CompetitionSection({ f, location, radius }: { f: any; location: Location | null; radius: number }) {
   const densityColors: Record<string, string> = { high: "text-red-600", medium: "text-amber-600", low: "text-emerald-600" };
   const densityBg: Record<string, string> = { high: "bg-red-50 border-red-200", medium: "bg-amber-50 border-amber-200", low: "bg-emerald-50 border-emerald-200" };
 
+  const centerLoc =
+    location && Number.isFinite(location.lat) && Number.isFinite(location.lng) && location.lat !== 0 && location.lng !== 0
+      ? location
+      : null;
+  const dots = useMemo(
+    () => competitorPoints(centerLoc, f.competition.competitors),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [centerLoc, f.competition.competitors],
+  );
+
   return (
     <SectionCard icon={<Target className="h-5 w-5" />} title="Competition" badge="Estimated" score={f.subScores?.competitionScore}>
-      {/* Schematic radius visualization */}
-      <div className="rounded-xl bg-[#F4F8EF] border border-border/60 h-40 flex items-center justify-center mb-4 relative overflow-hidden">
-        {/* Concentric rings */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-32 h-32 rounded-full border border-primary/10" />
-          <div className="absolute w-20 h-20 rounded-full border border-primary/20" />
-          <div className="absolute w-8 h-8 rounded-full bg-primary/10 border border-primary/30" />
-        </div>
-        {/* Center marker */}
-        <div className="relative z-10 text-center">
-          <div className="h-3 w-3 rounded-full bg-primary mx-auto mb-1 shadow-sm" />
-          <p className="text-[10px] font-bold text-foreground">Your Location</p>
-        </div>
-        {/* Scattered competitor dots */}
-        {f.competition.competitors.slice(0, 8).map((_: any, i: number) => (
-          <div
-            key={i}
-            className="absolute h-2 w-2 rounded-full bg-amber-500/60"
-            style={{ left: `${20 + (i * 8.7) % 60}%`, top: `${15 + (i * 11.3) % 65}%` }}
+      {/* Real geographic map: selected location marker + analysis radius + estimated competitors */}
+      {centerLoc ? (
+        <div className="mb-4">
+          <IndiaMap
+            point={{ lat: centerLoc.lat, lng: centerLoc.lng, label: centerLoc.name, sublabel: `${centerLoc.district}, ${centerLoc.state}` }}
+            radiusKm={radius}
+            competitors={dots}
+            className="h-64 sm:h-72"
           />
-        ))}
-      </div>
+          <p className="mt-1.5 px-1 text-[10px] text-muted-foreground">
+            Map data © OpenStreetMap contributors · competitor positions are estimated from distance data
+          </p>
+        </div>
+      ) : (
+        <div className="mb-4 rounded-xl border border-border/60 bg-muted/40 px-4 py-6 text-center text-xs text-muted-foreground">
+          Location coordinates unavailable — competitor map can't be drawn for this place.
+        </div>
+      )}
 
       <div className={cn("rounded-xl border p-3 mb-4", densityBg[f.competition.density])}>
         <div className="flex items-center justify-between">

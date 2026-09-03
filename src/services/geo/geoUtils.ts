@@ -18,6 +18,37 @@ export function normName(s: string): string {
   return out;
 }
 
+/** Stable string hash — seeds deterministic scatter/bearing layouts. */
+export function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+/**
+ * Destination point: move `distanceKm` from (lat, lng) along `bearingDeg`
+ * (0 = north, clockwise). Returns [lat, lng] degrees.
+ */
+export function offsetKm(lat: number, lng: number, bearingDeg: number, distanceKm: number): [number, number] {
+  const R = 6371;
+  const br = (bearingDeg * Math.PI) / 180;
+  const d = distanceKm / R;
+  const lat1 = (lat * Math.PI) / 180;
+  const lng1 = (lng * Math.PI) / 180;
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(br),
+  );
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(br) * Math.sin(d) * Math.cos(lat1),
+      Math.cos(d) - Math.sin(lat1) * Math.sin(lat2),
+    );
+  return [(lat2 * 180) / Math.PI, (lng2 * 180) / Math.PI];
+}
+
 /** Haversine distance in metres between two [lng, lat] points. */
 export function haversineMeters(a: LngLat, b: LngLat): number {
   const R = 6371000;

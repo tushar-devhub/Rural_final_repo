@@ -16,6 +16,8 @@ interface IndiaMapProps {
   radiusKm?: number;
   district?: DistrictFeature | null;
   neighbors?: DistrictFeature[];
+  /** Estimated competitor dots rendered inside the analysis radius. */
+  competitors?: MapPoint[];
   onMapClick?: (lat: number, lng: number) => void;
   className?: string;
 }
@@ -31,6 +33,11 @@ const PIN_SVG = `
   <path d="M17 1C8.2 1 1 8.1 1 16.9 1 28.9 17 43 17 43s16-14.1 16-26.1C33 8.1 25.8 1 17 1z" fill="#1a3a2a" stroke="#ffffff" stroke-width="2"/>
   <circle cx="17" cy="16.5" r="6" fill="#ffffff"/>
   <circle cx="17" cy="16.5" r="3.2" fill="#2e7d4f"/>
+</svg>`;
+
+const DOT_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+  <circle cx="9" cy="9" r="6" fill="#d97706" stroke="#ffffff" stroke-width="2"/>
 </svg>`;
 
 function boundsOfDistrict(polygons: LngLat[][][]): L.LatLngBounds | null {
@@ -57,6 +64,7 @@ export default function IndiaMap({
   radiusKm,
   district,
   neighbors = [],
+  competitors = [],
   onMapClick,
   className = "",
 }: IndiaMapProps) {
@@ -65,6 +73,7 @@ export default function IndiaMap({
   const markerRef = useRef<L.Marker | null>(null);
   const circleRef = useRef<L.Circle | null>(null);
   const districtLayerRef = useRef<L.LayerGroup | null>(null);
+  const dotsLayerRef = useRef<L.LayerGroup | null>(null);
   const [tileError, setTileError] = useState(false);
   // Keep the latest click handler accessible from the once-created map.
   const onMapClickRef = useRef(onMapClick);
@@ -105,6 +114,7 @@ export default function IndiaMap({
       markerRef.current = null;
       circleRef.current = null;
       districtLayerRef.current = null;
+      dotsLayerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -152,6 +162,39 @@ export default function IndiaMap({
       circleRef.current = circle;
     }
   }, [point?.lat, point?.lng, point?.label, radiusKm]);
+
+  // ── Competitor dots sync (kept above district fills) ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (dotsLayerRef.current) {
+      dotsLayerRef.current.remove();
+      dotsLayerRef.current = null;
+    }
+    if (!point || competitors.length === 0) return;
+
+    const group = L.layerGroup().addTo(map);
+    for (const c of competitors) {
+      const icon = L.divIcon({
+        className: "",
+        html: DOT_SVG,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+        popupAnchor: [0, -10],
+      });
+      const marker = L.marker([c.lat, c.lng], { icon, keyboard: false });
+      if (c.label) {
+        marker.bindTooltip(
+          `<strong>${c.label}</strong>${c.sublabel ? `<br/><span style="color:#7c4a03;font-size:11px">${c.sublabel}</span>` : ""}`,
+          { direction: "top", offset: [0, -9], opacity: 0.95 },
+        );
+      }
+      marker.addTo(group);
+    }
+    dotsLayerRef.current = group;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [competitors, point?.lat, point?.lng]);
 
   // ── District + neighbour polygon sync ──
   useEffect(() => {
@@ -266,6 +309,11 @@ export default function IndiaMap({
           {district && (
             <span className="flex items-center gap-1">
               <span className="h-2.5 w-2.5 rounded-[2px] border" style={{ borderColor: SELECTED_FILL, background: `${SELECTED_FILL}33` }} /> Selected district
+            </span>
+          )}
+          {competitors.length > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full border" style={{ background: "#d97706", borderColor: "#fff" }} /> Estimated competitor
             </span>
           )}
           {neighbors.length > 0 && (
