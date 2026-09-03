@@ -40,6 +40,24 @@ let micStream: MediaStream | null = null;
 let analyserNode: AnalyserNode | null = null;
 let animFrameId: number | null = null;
 
+// Manual (MediaRecorder) capture for server-side transcription
+let mediaRecorder: MediaRecorder | null = null;
+let recorderStream: MediaStream | null = null;
+let recorderChunks: Blob[] = [];
+let recorderAudioCtx: AudioContext | null = null;
+let recorderStartedAt = 0;
+
+function pickRecordingMime(): string {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+  ];
+  if (typeof MediaRecorder === "undefined") return "";
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+}
+
 export function isSpeechRecognitionSupported(): boolean {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
@@ -103,12 +121,12 @@ function getHindiVoice(): SpeechSynthesisVoice | null {
 // ─── Start listening ───
 export function startListening(
   onResult: (text: string, isFinal: boolean) => void,
-  onError: (error: string) => void,
+  onError: (error: string, code?: string) => void,
   onEnd: () => void,
   onStarted: () => void,
 ): void {
   if (!isSpeechRecognitionSupported()) {
-    onError("Speech recognition is not supported in this browser. Please type your question.");
+    onError("Speech recognition is not supported in this browser. Please type your question.", "unsupported");
     return;
   }
 
@@ -126,6 +144,7 @@ export function startListening(
   recognition.maxAlternatives = 1;
 
   let hasReceivedResult = false;
+  let networkRetries = 0;
 
   recognition.onstart = () => {
     onStarted();
@@ -156,17 +175,36 @@ export function startListening(
     const err = event.error;
     if (err === "no-speech") {
       if (!hasReceivedResult) {
-        onError("कोई आवाज़ नहीं सुनाई दी। दोबारा बोलें।");
+        onError("कोई आवाज़ नहीं सुनाई दी। दोबारा बोलें।", "no-speech");
       }
       // If we already got results, no-speech just means silence after speech — ignore
-    } else if (err === "not-allowed") {
-      onError("Microphone permission नहीं मिली। Browser settings में जाकर microphone allow करें।");
+    } else if (err === "not-allowed" || err === "service-not-allowed") {
+      onError("Microphone permission नहीं मिली। Browser settings में जाकर microphone allow करें।", "not-allowed");
     } else if (err === "network") {
-      onError("Internet connection में समस्या है। कृपया connection check करें।");
+      // The Google speech service is often unreachable from sandboxed iframes.
+      // Retry once (transient failures do recover); otherwise surface a clear
+      // error so the UI can offer audio-recording as the reliable fallback.
+      if (networkRetries < 1 && !hasReceivedResult) {
+        networkRetries += 1;
+        setTimeout(() => {
+          try {
+            recognition?.start();
+          } catch {
+            /* ignore */
+          }
+        }, 900);
+        return;
+      }
+      onError(
+        "इस browser की voice सेवा कनेक्ट नहीं हो पा रही है।",
+        "network",
+      );
+    } else if (err === "language-not-supported") {
+      onError("इस browser में Hindi voice recognition उपलब्ध नहीं है।", "unsupported");
     } else if (err === "aborted") {
       // User manually stopped — don't show error
     } else {
-      onError("आवाज़ समझने में दिक्कत हुई। दोबारा कोशिश करें।");
+      onError("आवाज़ समझने में दिक्कत हुई। दोबारा कोशिश करें।", "failed");
     }
   };
 
@@ -311,4 +349,164 @@ export function stopAudioAnalyzer(): void {
   }
   audioCtx = null;
   analyserNode = null;
+}
+
+// ─── Manual recording (MediaRecorder) for server-side transcription ───
+// This captures REAL microphone audio independent of the browser speech
+// service, which is blocked in sandboxed/cross-origin preview iframes.
+
+export function isMediaRecorderSupported(): boolean {
+  return typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+}
+
+export function isRecordingActive(): boolean {
+  return !!mediaRecorder && mediaRecorder.state !== "inactive";
+}
+
+export async function startManualRecording(
+  onVolume: (volume: number) => void,
+): Promise<{ ok: boolean; error?: string }> {
+  stopManualRecordingCleanup();
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorderStream = stream;
+
+    const mime = pickRecordingMime();
+    mediaRecorder = mime
+      ? new MediaRecorder(stream, { mimeType: mime })
+      : new MediaRecorder(stream);
+    recorderChunks = [];
+    recorderStartedAt = Date.now();
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) recorderChunks.push(event.data);
+    };
+
+    // Real-time level meter from the same stream being recorded
+    try {
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 128;
+      source.connect(analyser);
+      recorderAudioCtx = ctx;
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        if (!analyser || mediaRecorder?.state === "inactive") return;
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        onVolume(Math.min(1, avg / 128));
+        requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {
+      onVolume(0.2);
+    }
+
+    mediaRecorder.start(250);
+    return { ok: true };
+  } catch (err: unknown) {
+    const e = err as { name?: string };
+    if (e.name === "NotAllowedError") {
+      return { ok: false, error: "Microphone permission denied. Please allow mic access." };
+    }
+    if (e.name === "NotFoundError") {
+      return { ok: false, error: "No microphone found. Please connect a microphone." };
+    }
+    return { ok: false, error: "Microphone शुरू नहीं हो पाई।" };
+  }
+}
+
+export async function stopManualRecording(): Promise<{
+  blob: Blob | null;
+  mime: string;
+  durationMs: number;
+}> {
+  const durationMs = recorderStartedAt ? Date.now() - recorderStartedAt : 0;
+
+  if (!mediaRecorder || mediaRecorder.state === "inactive") {
+    stopManualRecordingCleanup();
+    return { blob: null, mime: "", durationMs };
+  }
+
+  return new Promise((resolve) => {
+    const recorder = mediaRecorder!;
+    recorder.onstop = () => {
+      const type = recorder.mimeType || "audio/webm";
+      const blob = new Blob(recorderChunks, { type });
+      stopManualRecordingCleanup();
+      resolve({
+        blob: blob.size > 0 ? blob : null,
+        mime: type,
+        durationMs,
+      });
+    };
+    try {
+      recorder.stop();
+    } catch {
+      stopManualRecordingCleanup();
+      resolve({ blob: null, mime: "", durationMs });
+    }
+  });
+}
+
+export function cancelManualRecording(): void {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    try {
+      mediaRecorder.onstop = null;
+      mediaRecorder.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+  stopManualRecordingCleanup();
+}
+
+function stopManualRecordingCleanup(): void {
+  mediaRecorder = null;
+  recorderChunks = [];
+  recorderStartedAt = 0;
+  recorderStream?.getTracks().forEach((t) => t.stop());
+  recorderStream = null;
+  if (recorderAudioCtx && recorderAudioCtx.state !== "closed") {
+    recorderAudioCtx.close().catch(() => {});
+  }
+  recorderAudioCtx = null;
+}
+
+// ─── Server-side transcription of a recorded blob ───
+// POSTs raw audio to the Convex HTTP action → Deepgram (Hindi).
+
+export async function transcribeRecording(
+  blob: Blob,
+): Promise<{ text?: string; error?: "not_configured" | "empty" | "network" | "failed" | "no_speech" }> {
+  const convexUrl = (import.meta.env.VITE_CONVEX_URL as string | undefined) || "";
+  const siteUrl = convexUrl.replace(/\.convex\.cloud$/, ".convex.site");
+  if (!siteUrl) return { error: "network" };
+
+  try {
+    const response = await fetch(`${siteUrl}/voice/transcribe`, {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "audio/webm" },
+      body: blob,
+    });
+
+    const data = (await response.json().catch(() => null)) as {
+      text?: string;
+      error?: string;
+    } | null;
+
+    if (!response.ok) {
+      if (data?.error === "not_configured") return { error: "not_configured" };
+      return { error: "failed" };
+    }
+    if (typeof data?.text === "string" && data.text.trim()) {
+      return { text: data.text.trim() };
+    }
+    return { error: "no_speech" };
+  } catch {
+    return { error: "network" };
+  }
 }

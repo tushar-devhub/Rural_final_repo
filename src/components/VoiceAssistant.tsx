@@ -5,6 +5,7 @@ import type { AdvisorStateChange } from "@/services/advisor/engine";
 import {
   isSpeechRecognitionSupported,
   isSpeechSynthesisSupported,
+  isMediaRecorderSupported,
   requestMicPermission,
   startListening,
   stopListening,
@@ -12,6 +13,10 @@ import {
   stopSpeaking,
   startAudioAnalyzer,
   stopAudioAnalyzer,
+  startManualRecording,
+  stopManualRecording,
+  cancelManualRecording,
+  transcribeRecording,
 } from "@/services/voiceService";
 import {
   Mic, MicOff, X, Send, Volume2, VolumeX, Copy,
@@ -28,7 +33,7 @@ interface ChatMessage {
   appliedNote?: string | null;
 }
 
-type AppState = "idle" | "listening" | "confirming" | "thinking" | "speaking" | "error" | "permission_required";
+type AppState = "idle" | "listening" | "recording" | "confirming" | "thinking" | "speaking" | "error" | "permission_required";
 
 const DEFAULT_PROMPTS: string[] = [
   "मेरे लिए कौन सा business अच्छा है?",
@@ -77,6 +82,9 @@ export function VoiceAssistant() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [suggestions, setSuggestions] = useState<string[]>(DEFAULT_PROMPTS);
   const [micSupported] = useState(() => isSpeechRecognitionSupported());
+  const [recorderSupported] = useState(() => isMediaRecorderSupported());
+  const [voiceErrCode, setVoiceErrCode] = useState<string | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const {
     location, business, capital, feasibility,
@@ -98,8 +106,21 @@ export function VoiceAssistant() {
       stopListening();
       stopSpeaking();
       stopAudioAnalyzer();
+      cancelManualRecording();
     };
   }, []);
+
+  // Recording timer for the fallback capture mode
+  useEffect(() => {
+    if (appState !== "recording") {
+      setRecordingSeconds(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setRecordingSeconds((s) => s + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [appState]);
 
   // ─── Send message through the real RuralBiz advisor engine ───
   const sendMessage = useCallback(async (raw: string, isVoice = false) => {
@@ -175,17 +196,23 @@ export function VoiceAssistant() {
     }
   }, [location, business, capital, feasibility, setBusiness, setCapital, setLocation, setFeasibility, ttsEnabled]);
 
-  // ─── Voice input ───
+  // ─── Native browser speech recognition (works outside sandboxed iframes) ───
   const handleVoiceStart = useCallback(async () => {
     if (busyRef.current) return;
     setError(null);
+    setVoiceErrCode(null);
     setInterimText("");
     setFinalTranscript("");
     stopSpeaking();
 
     if (!micSupported) {
-      setError("इस browser में voice input उपलब्ध नहीं है। कृपया लिखकर पूछें।");
-      setAppState("error");
+      // No native STT → go straight to audio-recording fallback if available
+      if (recorderSupported) {
+        startRecordMode();
+      } else {
+        setError("इस browser में voice input उपलब्ध नहीं है। कृपया लिखकर पूछें।");
+        setAppState("error");
+      }
       return;
     }
 
@@ -211,10 +238,21 @@ export function VoiceAssistant() {
           setInterimText(text);
         }
       },
-      (err) => {
+      (err, code) => {
         stopAudioAnalyzer();
         setMicVolume(0);
+        // The browser speech service is unreachable inside sandboxed/cross-origin
+        // preview iframes. Rather than stopping at an error card, fall straight
+        // into audio-recording → server-side transcription, which works here.
+        if (recorderSupported && (code === "network" || code === "unsupported")) {
+          setError(null);
+          setVoiceErrCode(code ?? null);
+          setAppState("idle");
+          window.setTimeout(() => startRecordModeRef.current(), 200);
+          return;
+        }
         setError(err);
+        setVoiceErrCode(code ?? null);
         setAppState("error");
       },
       () => {
@@ -224,12 +262,82 @@ export function VoiceAssistant() {
       },
       () => { /* mic live */ },
     );
-  }, [micSupported]);
+  }, [micSupported, recorderSupported]);
+
+  // ─── Fallback: record audio locally, then transcribe on the server ───
+  const startRecordMode = useCallback(async () => {
+    if (busyRef.current) return;
+    setError(null);
+    setVoiceErrCode(null);
+    setInterimText("");
+    setFinalTranscript("");
+    stopSpeaking();
+    stopListening();
+    stopAudioAnalyzer();
+    setMicVolume(0);
+
+    const perm = await requestMicPermission();
+    if (!perm.granted) {
+      setError(perm.error || "Microphone permission required.");
+      setAppState("permission_required");
+      return;
+    }
+
+    const result = await startManualRecording((vol) => setMicVolume(vol));
+    if (!result.ok) {
+      setError(result.error || "Microphone शुरू नहीं हो पाई।");
+      setAppState("error");
+      return;
+    }
+    setAppState("recording");
+    setRecordingSeconds(0);
+  }, []);
+
+  // Keep a ref so handleVoiceStart can auto-fall back into recording mode
+  const startRecordModeRef = useRef<() => void>(() => {});
+  startRecordModeRef.current = startRecordMode;
+
+  const stopRecordAndSend = useCallback(async () => {
+    const recording = await stopManualRecording();
+    setMicVolume(0);
+    if (!recording.blob) {
+      setError("कोई आवाज़ रिकॉर्ड नहीं हुई। दोबारा बोलें।");
+      setAppState("error");
+      return;
+    }
+
+    setAppState("thinking");
+    const result = await transcribeRecording(recording.blob);
+    if (result.text) {
+      setFinalTranscript(result.text);
+      setInterimText("");
+      setAppState("confirming");
+      return;
+    }
+
+    if (result.error === "not_configured") {
+      setError(
+        "Voice transcription अभी configured नहीं है। Freebuff के Keys/API keys में DEEPGRAM_API_KEY डालें, फिर दोबारा try करें।",
+      );
+    } else if (result.error === "no_speech") {
+      setError("कोई आवाज़ नहीं सुनाई दी। दोबारा बोलें।");
+    } else {
+      setError("आवाज़ transcribe नहीं हो पाई। Internet check करके दोबारा try करें।");
+    }
+    setVoiceErrCode("server");
+    setAppState("error");
+  }, []);
 
   const handleVoiceStop = useCallback(() => {
     stopListening();
     stopAudioAnalyzer();
     setMicVolume(0);
+  }, []);
+
+  const handleRecordCancel = useCallback(() => {
+    cancelManualRecording();
+    setMicVolume(0);
+    setAppState("idle");
   }, []);
 
   const handleConfirmTranscript = useCallback(() => {
@@ -240,8 +348,15 @@ export function VoiceAssistant() {
     setError(null);
     setFinalTranscript("");
     setInterimText("");
-    handleVoiceStart();
-  }, [handleVoiceStart]);
+    // If native STT is unavailable or unreachable in this browser, route the
+    // retry through the audio-recording → server transcription path instead of
+    // looping on the same failing service.
+    if (recorderSupported && (!micSupported || voiceErrCode === "network" || voiceErrCode === "unsupported")) {
+      startRecordMode();
+    } else {
+      handleVoiceStart();
+    }
+  }, [handleVoiceStart, startRecordMode, micSupported, recorderSupported, voiceErrCode]);
 
   const handleStopSpeaking = useCallback(() => {
     stopSpeaking();
@@ -377,15 +492,17 @@ export function VoiceAssistant() {
                       </span>
                     </div>
                   )}
-                  {micSupported ? (
+                  {micSupported || recorderSupported ? (
                     <button
-                      onClick={handleVoiceStart}
+                      onClick={micSupported ? handleVoiceStart : startRecordMode}
                       className="mt-5 mx-auto flex flex-col items-center gap-2"
                     >
                       <div className="h-16 w-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/20 hover:shadow-xl transition-all hover:scale-105">
                         <Mic className="h-7 w-7" />
                       </div>
-                      <span className="text-xs font-medium text-primary">बोलकर पूछें</span>
+                      <span className="text-xs font-medium text-primary">
+                        {micSupported ? "बोलकर पूछें" : "बोलकर पूछें (ऑडियो)"}
+                      </span>
                     </button>
                   ) : (
                     <p className="text-[10px] text-red-500 mt-4">इस browser में voice उपलब्ध नहीं — नीचे लिखकर पूछें</p>
@@ -493,7 +610,20 @@ export function VoiceAssistant() {
                   <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-xs text-red-700">{error}</p>
-                    <div className="flex gap-3 mt-2">
+                    {voiceErrCode === "network" && recorderSupported && (
+                      <p className="text-[10px] text-red-500 mt-1 leading-relaxed">
+                        इस browser में direct voice recognition connect नहीं हो पा रहा — audio recording के ज़रिए server-side transcription उपयोग करें।
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                      {recorderSupported && (voiceErrCode === "network" || voiceErrCode === "unsupported" || !micSupported) && (
+                        <button
+                          onClick={() => { setError(null); setVoiceErrCode(null); startRecordMode(); }}
+                          className="text-[11px] font-bold text-red-700 hover:underline"
+                        >
+                          🎙️ ऑडियो से पूछें
+                        </button>
+                      )}
                       <button onClick={handleRetryVoice} className="text-[11px] font-semibold text-red-600 hover:underline">
                         दोबारा बोलें →
                       </button>
@@ -542,6 +672,37 @@ export function VoiceAssistant() {
                     })}
                   </div>
                   <span className="text-xs font-medium text-primary">सुन रहा हूँ... बोलिए</span>
+                </div>
+              </div>
+            )}
+
+            {/* Recording indicator (server-transcribed audio fallback) */}
+            {appState === "recording" && (
+              <div className="px-4 py-2.5 bg-red-50 border-t border-red-100">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-center gap-2.5">
+                    <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                    </span>
+                    <span className="text-xs font-semibold text-red-700">
+                      रिकॉर्ड हो रहा है… {recordingSeconds}s
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      onClick={stopRecordAndSend}
+                      className="rounded-lg bg-red-600 text-white px-3.5 py-1.5 text-[11px] font-semibold hover:bg-red-700 transition-colors"
+                    >
+                      ⏹ रोकें और भेजें
+                    </button>
+                    <button
+                      onClick={handleRecordCancel}
+                      className="rounded-lg bg-white border border-border px-3.5 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted transition-colors"
+                    >
+                      रद्द करें
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -611,16 +772,24 @@ export function VoiceAssistant() {
                   >
                     <Send className="h-4 w-4" />
                   </button>
+                ) : appState === "recording" ? (
+                  <button
+                    onClick={stopRecordAndSend}
+                    className="h-10 w-10 rounded-xl bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors animate-pulse"
+                    aria-label="Stop recording and send"
+                  >
+                    <MicOff className="h-4 w-4" />
+                  </button>
                 ) : (
                   <button
-                    onClick={handleVoiceStart}
-                    disabled={!micSupported || appState === "thinking"}
+                    onClick={micSupported ? handleVoiceStart : startRecordMode}
+                    disabled={(!micSupported && !recorderSupported) || appState === "thinking"}
                     className={cn(
                       "h-10 w-10 rounded-xl flex items-center justify-center transition-colors disabled:opacity-40",
-                      micSupported ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted text-muted-foreground",
+                      micSupported || recorderSupported ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted text-muted-foreground",
                     )}
-                    aria-label={micSupported ? "Start voice input" : "Voice input not supported"}
-                    title={micSupported ? "बोलकर पूछें" : "Voice input not supported"}
+                    aria-label={micSupported ? "Start voice input" : recorderSupported ? "Start audio recording" : "Voice input not supported"}
+                    title={micSupported ? "बोलकर पूछें" : recorderSupported ? "बोलकर पूछें (ऑडियो)" : "Voice input not supported"}
                   >
                     <Mic className="h-4 w-4" />
                   </button>
