@@ -82,63 +82,28 @@ export function normalizeRecord(r: Record<string, unknown>): GeoPlace | null {
 let cachePromise: Promise<GeoPlace[]> | null = null;
 let cacheError: Error | null = null;
 
-/** Browser-side gzip decompression of the fetched asset. */
-async function gunzipResponse(
-  url: string,
-  onProgress?: (pct: number) => void,
-): Promise<string> {
-  const res = await fetch(url, { cache: "force-cache" });
-  if (!res.ok) throw new Error(`Location data download failed (HTTP ${res.status})`);
-  if (typeof DecompressionStream === "undefined") {
-    throw new Error("This browser cannot decompress the location dataset.");
-  }
-  if (!res.body) {
-    const buf = await res.arrayBuffer();
-    const blob = new Blob([buf]);
-    return new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text();
-  }
-
-  // Stream the compressed bytes so the UI can show real progress,
-  // then gunzip the fully-received blob.
-  const total = Number(res.headers.get("content-length") ?? 0);
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(value);
-      received += value.length;
-      if (total > 0) onProgress?.(Math.round((received / total) * 100));
-    }
-  }
-  const bytes = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-  const text = await new Response(stream).text();
-  onProgress?.(100);
-  return text;
-}
-
 /**
- * Loads and normalizes the full India pincode directory once.
- * Result is cached for the session. Pure module — call sites can rely on a
- * single fetch of the ~3.3 MB compressed asset.
+ * Loads and normalizes the full India pincode directory.
+ * Result is cached for the session. This is the BACKGROUND enrichment layer:
+ * search never waits on it — the compact pin-heads index unblocks search first.
+ * Callers may pass an AbortSignal (see gzLoader timeouts); an aborted/failed
+ * load is recorded so a later call can retry.
  */
 export function loadPincodeData(
   sourceUrl: string = PINCODE_DATA_URL,
   onProgress?: (pct: number) => void,
+  signal?: AbortSignal,
 ): Promise<GeoPlace[]> {
   if (cachePromise) return cachePromise;
   if (cacheError) throw cacheError;
 
   cachePromise = (async () => {
-    const text = await gunzipResponse(sourceUrl, onProgress);
+    const { fetchGunzipText } = await import("./gzLoader");
+    const text = await fetchGunzipText(sourceUrl, {
+      signal,
+      timeoutMs: 0, // explicit signal controls this layer
+      onProgress,
+    });
     const raw = JSON.parse(text) as Record<string, unknown>[];
     const seen = new Set<string>();
     const out: GeoPlace[] = [];

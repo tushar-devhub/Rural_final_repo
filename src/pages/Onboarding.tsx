@@ -11,6 +11,7 @@ import { getRecommendations } from "@/data/recommendations";
 import IndiaMap from "@/components/IndiaMap";
 import {
   initLocationService, searchLocations, suggestLocations, curatedSuggestions, nearestLocations, registerHit,
+  getDetailState, type DetailLoadState,
   getLoadState, type LocationHit, type GeoLoadState,
 } from "@/services/geo/locationService";
 import { loadDistrictBoundaries, resolveDistrict, adjacentDistricts, type DistrictFeature } from "@/services/geo/boundaries";
@@ -209,23 +210,32 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<LocationHit[]>([]);
   const [geo, setGeo] = useState<GeoLoadState>(getLoadState());
+  const [detail, setDetail] = useState<DetailLoadState>(getDetailState());
   const [pickNote, setPickNote] = useState<string | null>(null);
   const [boundary, setBoundary] = useState<BoundaryState>({ status: "idle", feature: null, neighbors: [] });
   const [reloadKey, setReloadKey] = useState(0);
 
-  // ── dataset bootstrap (once per session) ──
+  // ── dataset bootstrap (tiered: curated → pin-heads index → full detail) ──
   useEffect(() => {
     let cancelled = false;
+    const setIfLive = <T,>(fn: (v: T) => void) => (v: T) => {
+      if (!cancelled) fn(v);
+    };
     const s = getLoadState();
     setGeo(s.status === "ready" ? s : { status: "loading", progress: 0 });
+    setDetail(getDetailState());
     setHits(curatedSuggestions(8));
     if (s.status === "ready") {
+      // Already indexed — make sure the background enrichment subscriber is live.
+      void initLocationService(undefined, undefined, setIfLive(setDetail));
       setHits((prev) => (prev.length ? prev : suggestLocations(10)));
       return;
     }
-    initLocationService((pct) => {
-      if (!cancelled) setGeo({ status: "loading", progress: pct });
-    })
+    initLocationService(
+      setIfLive((pct: number) => setGeo({ status: "loading", progress: pct })),
+      undefined,
+      setIfLive(setDetail),
+    )
       .then(() => {
         if (!cancelled) {
           setGeo(getLoadState());
@@ -377,7 +387,7 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
       {datasetLoading && (
         <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground">
           <Loader2 className="h-4 w-4 text-primary animate-spin" />
-          <span className="flex-1">Loading All India location directory (PIN codes, villages, towns)…</span>
+          <span className="flex-1">Loading location index — search will be ready in a moment…</span>
           {geo.progress != null && geo.progress > 0 && (
             <span className="font-semibold text-primary">{geo.progress}%</span>
           )}
@@ -396,7 +406,14 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
       {geo.status === "ready" && (
         <p className="mb-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Database className="h-3 w-3" />
-          All India Pincode Directory loaded — {geo.total.toLocaleString("en-IN")} post offices, every state &amp; UT
+          {geo.total.toLocaleString("en-IN")} PIN locations indexed across India
+          {detail.status === "loading" && (
+            <span className="inline-flex items-center gap-1 text-primary/80">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              adding post-office detail{detail.progress != null && detail.progress > 0 ? `… ${detail.progress}%` : "…"}
+            </span>
+          )}
+          {detail.status === "ready" && " · full post-office detail ready"}
         </p>
       )}
 
@@ -509,15 +526,17 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
           ))}
           {hits.length === 0 && (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-              {datasetLoading
-                ? "Searching across India…"
-                : "No matching Indian location found. Try a different spelling or PIN code."}
+              {datasetError
+                ? "No matching demo town. Try a different spelling or PIN code."
+                : datasetLoading
+                  ? "Indexing locations…"
+                  : "No matching Indian location found. Try a different spelling or PIN code."}
             </div>
           )}
         </div>
         {!query.trim() && geo.status !== "ready" && (
           <p className="mt-1.5 text-[10px] text-muted-foreground">
-            Demo towns are available while the full India directory loads.
+            Demo towns are searchable while the India index loads.
           </p>
         )}
       </div>

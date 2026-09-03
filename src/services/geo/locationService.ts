@@ -5,7 +5,8 @@
 // Returns ready-to-select hits; selecting one registers the Location so the
 // feasibility engine and the rest of the app resolve it by id.
 
-import { loadPincodeData, type GeoPlace } from "./pincodeData";
+import { loadPincodeData, PINCODE_DATA_URL, type GeoPlace } from "./pincodeData";
+import { loadPinIndex, PIN_INDEX_URL } from "./pinIndex";
 import { locations, upsertLocation, type Location } from "@/data/locations";
 import { searchPlaces, popularSuggestions, findNearestPlaces } from "./placeSearch";
 import { estimateDemographics } from "./demographics";
@@ -32,12 +33,30 @@ export type GeoLoadState =
   | { status: "ready"; total: number }
   | { status: "error"; message: string };
 
-let placesCache: GeoPlace[] | null = null;
-let curatedGeo: GeoPlace[] | null = null;
+let placesCache: GeoPlace[] | null = null; // tier 3: full directory (background)
+let pinCache: GeoPlace[] | null = null; // tier 2: compact pin-heads index (fast)
+let curatedGeo: GeoPlace[] | null = null; // tier 1: curated demo towns (sync)
 let loadState: GeoLoadState = { status: "idle" };
+
+export interface DetailLoadState {
+  status: "idle" | "loading" | "ready" | "error";
+  progress?: number;
+}
+
+let detailState: DetailLoadState = { status: "idle" };
 
 export function getLoadState(): GeoLoadState {
   return loadState;
+}
+
+/** State of the optional full-directory background enrichment. */
+export function getDetailState(): DetailLoadState {
+  return detailState;
+}
+
+/** The most complete directory layer currently available (never blocks). */
+function activeDirectory(): GeoPlace[] {
+  return placesCache ?? pinCache ?? [];
 }
 
 /** GeoPlace adapter for calibrated curated towns. */
@@ -169,30 +188,73 @@ function hitFromPlace(p: GeoPlace): LocationHit {
 }
 
 function combine(): GeoPlace[] {
-  return [...ensureCurated(), ...(placesCache ?? [])];
+  return [...ensureCurated(), ...activeDirectory()];
 }
 
 /**
- * Initializes the dataset. Called lazily when the location screen mounts.
- * Directory data (~3.3 MB compressed, all India) downloads + indexes once.
+ * Bootstraps the search dataset in tiers so nothing ever blocks:
+ *
+ *   Tier 1 (sync)      curated demo towns — instantly searchable
+ *   Tier 2 (fast)      pin-heads index (~380 KB gz, ~19.5k pincodes) — awaited;
+ *                      once loaded the whole country is searchable
+ *   Tier 3 (background) full office directory (~3.3 MB gz) — kicked off but
+ *                      never awaited; aborts after 30s and simply leaves the
+ *                      pin-heads layer active.
  */
 export async function initLocationService(
   onProgress?: (pct: number) => void,
-  sourceUrl?: string,
+  pinIndexUrl?: string,
+  onDetail?: (d: DetailLoadState) => void,
 ): Promise<void> {
-  if (loadState.status === "ready" || loadState.status === "loading") return;
+  if (loadState.status === "ready") {
+    // Re-attach the enrichment subscriber (remounts); no-op if already running.
+    void enrichWithFullDirectory(onDetail);
+    return;
+  }
+  if (loadState.status === "loading") return;
   loadState = { status: "loading", progress: 0 };
+  ensureCurated();
   try {
-    ensureCurated();
-    placesCache = await loadPincodeData(sourceUrl, onProgress);
-    loadState = { status: "ready", total: placesCache.length };
+    pinCache = await loadPinIndex(pinIndexUrl ?? PIN_INDEX_URL, onProgress);
+    loadState = { status: "ready", total: pinCache.length };
     onProgress?.(100);
+    void enrichWithFullDirectory(onDetail);
   } catch (err) {
     loadState = {
       status: "error",
       message: err instanceof Error ? err.message : "Location data could not be loaded.",
     };
     throw err;
+  }
+}
+
+/** Background tier 3 — never awaited by search/UI. */
+async function enrichWithFullDirectory(onDetail?: (d: DetailLoadState) => void): Promise<void> {
+  if (detailState.status === "loading") return;
+  if (detailState.status === "ready" || detailState.status === "error") {
+    // Already finished — sync late subscribers with the final state.
+    onDetail?.({ ...detailState });
+    return;
+  }
+  detailState = { status: "loading", progress: 0 };
+  onDetail?.({ ...detailState });
+  try {
+    const { FULL_LOAD_TIMEOUT_MS } = await import("./gzLoader");
+    const places = await loadPincodeData(
+      PINCODE_DATA_URL,
+      (pct) => {
+        detailState = { status: "loading", progress: pct };
+        onDetail?.({ status: "loading", progress: pct });
+      },
+      AbortSignal.timeout(FULL_LOAD_TIMEOUT_MS),
+    );
+    placesCache = places;
+    detailState = { status: "ready" };
+    onDetail?.({ status: "ready" });
+  } catch {
+    // Full detail is best-effort; the pin-heads layer keeps search working.
+    detailState = { status: "error" };
+    onDetail?.({ status: "error" });
   }
 }
 
@@ -248,7 +310,7 @@ export function suggestLocations(limit = 9): LocationHit[] {
 
 /** Nearest directory places to a clicked map coordinate. */
 export function nearestLocations(lat: number, lng: number, radiusKm = 30): LocationHit[] {
-  const dir = placesCache ?? [];
+  const dir = activeDirectory();
   const results = findNearestPlaces(dir, lat, lng, radiusKm, 4);
   const hits: LocationHit[] = [];
   const seen = new Set<string>();
