@@ -23,6 +23,7 @@ import type { FeasibilityData } from "@/data/feasibility-types";
 import { generateFeasibility } from "@/data/feasibility";
 import { formatIndianCurrency } from "@/data/assessment";
 import { detectLanguage, extractBusinesses, extractCapital, extractLocation, type AdvisorLang } from "./parse";
+import { matchSchemesForProfileSource } from "@/engine/schemeMatching";
 
 // ─── Public types ───
 
@@ -431,41 +432,68 @@ function buildLoanAnswer(lang: AdvisorLang, f: FeasibilityData): string {
   return `${schemeLine} ${loanLine}${detailLine}${affordLine}${caveat}`;
 }
 
-function buildSchemeAnswer(lang: AdvisorLang, f: FeasibilityData): string {
+function buildSchemeAnswer(
+  lang: AdvisorLang,
+  f: FeasibilityData,
+  business: BusinessCategory | null,
+  state: string,
+): string {
   const fin = f.financial;
   const loan = fin.loanDetails;
   const br = fin.projectCostBreakdown;
 
-  if (br?.isLimitExceeded) {
-    return pick(
-      lang,
-      `SCHEME LIMIT EXCEEDED:\n\nCalculated project cost: ${FULL(br.rawProjectCost)}\nMaximum allowed: ₹50 lakh\n\nCompliant structure:\n• Project: ${FULL(br.compliantProjectCost ?? 0)}\n• Agency funding: ${FULL(br.compliantAgencyFunding ?? 0)}\n• आपका contribution: ${FULL(br.compliantEntrepreneurContribution ?? 0)}\n\nइसलिए recommended financing ${FULL(br.compliantAgencyFunding ?? 0)} पर cap है।`,
-      `SCHEME LIMIT EXCEEDED:\n\nCalculated project cost: ${FULL(br.rawProjectCost)}\nMaximum allowed: ₹50 lakh\n\nCompliant structure:\n• Project: ${FULL(br.compliantProjectCost ?? 0)}\n• Agency funding: ${FULL(br.compliantAgencyFunding ?? 0)}\n• Aapka contribution: ${FULL(br.compliantEntrepreneurContribution ?? 0)}\n\nIsliye recommended financing ${FULL(br.compliantAgencyFunding ?? 0)} par cap hai.`,
-      `SCHEME LIMIT EXCEEDED:\n\nCalculated project cost: ${FULL(br.rawProjectCost)}\nMaximum allowed: ₹50 lakh\n\nCompliant structure:\n• Project: ${FULL(br.compliantProjectCost ?? 0)}\n• Agency funding: ${FULL(br.compliantAgencyFunding ?? 0)}\n• Your contribution: ${FULL(br.compliantEntrepreneurContribution ?? 0)}\n\nSo the recommended financing is capped at ${FULL(br.compliantAgencyFunding ?? 0)}.`,
-    );
+  const limitBlock = br?.isLimitExceeded
+    ? pick(
+        lang,
+        `SCHEME LIMIT EXCEEDED:\nCalculated project cost: ${FULL(br.rawProjectCost)}\nMaximum allowed: ₹50 lakh\nCompliant structure: ${FULL(br.compliantProjectCost ?? 0)} project, ${FULL(br.compliantAgencyFunding ?? 0)} agency funding, ${FULL(br.compliantEntrepreneurContribution ?? 0)} contribution.`,
+        `SCHEME LIMIT EXCEEDED:\nCalculated project cost: ${FULL(br.rawProjectCost)}\nMaximum allowed: ₹50 lakh\nCompliant structure: ${FULL(br.compliantProjectCost ?? 0)} project, ${FULL(br.compliantAgencyFunding ?? 0)} agency funding, ${FULL(br.compliantEntrepreneurContribution ?? 0)} contribution.`,
+        `SCHEME LIMIT EXCEEDED:\nCalculated project cost: ${FULL(br.rawProjectCost)}\nMaximum allowed: ₹50 lakh\nCompliant structure: ${FULL(br.compliantProjectCost ?? 0)} project, ${FULL(br.compliantAgencyFunding ?? 0)} agency funding, ${FULL(br.compliantEntrepreneurContribution ?? 0)} contribution.`,
+      )
+    : "";
+
+  const structure = pick(
+    lang,
+    `आपके financing calculation में ${fin.recommendedScheme} उपयोग हुई है${loan ? ` — ${FULL(loan.amount)} तक, ${loan.interestRate}% ब्याज, ${loan.tenure} साल tenure` : ""}।`,
+    `Aapke financing calculation mein ${fin.recommendedScheme} upyog hui hai${loan ? ` — ${FULL(loan.amount)} tak, ${loan.interestRate}% interest, ${loan.tenure} saal tenure` : ""}.`,
+    `Your financing calculation uses ${fin.recommendedScheme}${loan ? ` — up to ${FULL(loan.amount)} at ${loan.interestRate}% interest over ${loan.tenure} years` : ""}.`,
+  );
+
+  let matched = "";
+  if (business) {
+    const profile = matchSchemesForProfileSource({
+      businessId: business.id,
+      businessName: business.name,
+      businessCategory: business.category,
+      state: state || "Uttar Pradesh",
+      district: "",
+      contribution: fin.availableContribution,
+      projectCost: fin.totalProjectCost,
+      fundingRequirement: fin.potentialLoan,
+    });
+    const topMatches = profile.matches.filter((m) => m.level !== "low").slice(0, 3);
+    if (topMatches.length > 0) {
+      const lines = topMatches.map((m, i) => {
+        const level = m.level === "high" ? "HIGH MATCH" : m.level === "possible" ? "POSSIBLE MATCH" : "LOW MATCH";
+        const why = m.reasons[0]?.text;
+        return `${i + 1}. ${m.scheme.name} — ${level}\n   ${why ?? m.scheme.shortDescription}`;
+      });
+      matched = pick(
+        lang,
+        `\n\nआपके business profile के हिसाब से ये सरकारी योजनाएँ potentially relevant हैं:\n\n${lines.join("\n\n")}\n\nयह preliminary match है — eligibility official source और lender पर verify करनी होगी।`,
+        `\n\nAapke business profile ke hisaab se yeh sarkari yojanayein potentially relevant hain:\n\n${lines.join("\n\n")}\n\nYeh preliminary match hai — eligibility official source aur lender par verify karni hogi.`,
+        `\n\nBased on your business profile, these government programmes are potentially relevant to explore:\n\n${lines.join("\n\n")}\n\nThis is a preliminary match — eligibility must be verified with the official source and lender.`,
+      );
+    }
   }
 
-  let out = pick(
+  const caveat = pick(
     lang,
-    `आपके project के लिए ${fin.recommendedScheme} applicable दिख रही है।`,
-    `Aapke project ke liye ${fin.recommendedScheme} applicable dikh rahi hai.`,
-    `Based on your project size, ${fin.recommendedScheme} appears applicable.`,
+    "MUDRA, PMEGP जैसी योजनाओं की interest rate, subsidy और ceilings समय-समय पर बदलती हैं — official portal या बैंक/DIC से verify करें।",
+    "MUDRA, PMEGP jaise yojanaon ki interest rate, subsidy aur ceilings samay-samay par badalti hain — official portal ya bank/DIC se verify karein.",
+    "Interest rates, subsidy percentages and ceilings for schemes like MUDRA and PMEGP change periodically — verify with the official portal, a bank or the DIC.",
   );
-  if (loan) {
-    out += "\n\n" + pick(
-      lang,
-      `${FULL(loan.amount)} तक funding, ${loan.interestRate}% ब्याज, ${loan.tenure} साल tenure, ${loan.moratorium} महीने moratorium।`,
-      `${FULL(loan.amount)} tak funding, ${loan.interestRate}% interest, ${loan.tenure} saal tenure, ${loan.moratorium} mahine moratorium.`,
-      `Up to ${FULL(loan.amount)} funding at ${loan.interestRate}% interest, a ${loan.tenure}-year tenure and ${loan.moratorium}-month moratorium.`,
-    );
-  }
-  out += "\n\n" + pick(
-    lang,
-    "MUDRA या PMEGP जैसी सरकारी योजनाएँ भी relevant हो सकती हैं, लेकिन eligibility आपकी category, location और current rules पर depend करेगी। बैंक या DIC में verify करें।",
-    "MUDRA ya PMEGP jaise sarkari yojanayein bhi relevant ho sakti hain, lekin eligibility aapki category, location aur current rules par depend karegi. Bank ya DIC mein verify karein.",
-    "Government schemes like MUDRA or PMEGP may also be relevant, but eligibility depends on your category, location and current scheme rules. Please verify with a bank or the DIC.",
-  );
-  return out;
+
+  return [limitBlock, structure, matched, caveat].filter(Boolean).join("\n");
 }
 
 function buildSwotAnswer(lang: AdvisorLang, f: FeasibilityData): string {
@@ -598,9 +626,11 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
   // Topic intents — answer from the actual scenario data
   const singleBusiness = businesses.length === 1 ? businesses[0] : null;
 
-  // Business recommendation
+  // Business recommendation — but when the user names a specific scheme
+  // (MUDRA/PMEGP/scheme/yojana), the scheme intent below must take priority.
+  const schemeMention = /(mudra|pmegp|scheme|subsidy|yojana|स्कीम|सरकारी|योजना|मुद्रा)/.test(hint);
   const recommendIntent = /(suggest|recommend|kaunsa business|kya business|business karun|business kholu|sahi rahega|कौन सा business|समझ नहीं)/.test(hint) && businesses.length === 0;
-  if (recommendIntent) {
+  if (recommendIntent && !schemeMention) {
     const loc = mentionedLocation ?? context.location;
     const cap = capital ?? context.capital;
     if (loc && cap > 0) {
@@ -624,7 +654,7 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
     const sc = feasibilityForScenario(context, { business: singleBusiness, capital, location: mentionedLocation });
     if (sc.feasibility) {
       return {
-        text: buildSchemeAnswer(lang, sc.feasibility),
+        text: buildSchemeAnswer(lang, sc.feasibility, sc.business, sc.location?.state ?? context.location?.state ?? "Uttar Pradesh"),
         followups: [pick(lang, "मेरा loan breakdown बताओ", "Mera loan breakdown batao", "Show my loan breakdown")],
         suggestPage: "/dashboard",
       };

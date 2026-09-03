@@ -4,6 +4,7 @@ import { DataConfidenceBadge } from "@/components/ui/DataConfidenceBadge";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useCountUp } from "@/hooks/useCountUp";
+import SchemesSection from "@/components/SchemesSection";
 import { useInView } from "@/hooks/useInView";
 import {
   Users, Lightbulb, ShieldCheck, AlertTriangle, Target,
@@ -105,6 +106,9 @@ export default function Dashboard() {
 
           {/* ── Financial Overview ── */}
           <FinancialOverviewSection f={f} />
+
+          {/* ── Government Schemes & Financing ── */}
+          <SchemesSection />
         </div>
 
         {/* ═══ NEXT STEPS ACTION PLAN ═══ */}

@@ -2,6 +2,7 @@ import { useOnboarding } from "@/lib/onboarding-context";
 import { formatIndianCurrency, getVerdictColor, getVerdictIcon } from "@/data/assessment";
 import { SWOTGrid } from "@/components/ui/SWOTGrid";
 import { DataConfidenceBadge } from "@/components/ui/DataConfidenceBadge";
+import { matchSchemesForProfileSource, type SchemeMatch } from "@/engine/schemeMatching";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import {
@@ -46,6 +47,19 @@ export default function Report() {
   }
 
   const f = feasibility;
+  const schemeResult =
+    feasibility && business && location
+      ? matchSchemesForProfileSource({
+          businessId: business.id,
+          businessName: business.name,
+          businessCategory: business.category,
+          state: location.state,
+          district: location.district,
+          contribution: feasibility.financial.availableContribution || capital,
+          projectCost: feasibility.financial.totalProjectCost,
+          fundingRequirement: feasibility.financial.potentialLoan,
+        })
+      : null;
   const today = new Date().toLocaleDateString("en-IN", {
     year: "numeric",
     month: "long",
@@ -220,6 +234,23 @@ export default function Report() {
             <div className="mt-2"><DataConfidenceBadge type="verified" /></div>
           </Section>
 
+          {/* Potential Government Schemes */}
+          {schemeResult && (
+            <Section title="Potential Government Schemes">
+              <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                Based on your profile ({business?.name} · {location?.name}, {location?.district} · {formatIndianCurrency(f.financial.availableContribution || capital)} own capital · {formatIndianCurrency(f.financial.potentialLoan)} estimated financing need), the following programs are potentially relevant to investigate. This is a preliminary AI-assisted match — it does not confirm eligibility.
+              </p>
+              <div className="space-y-2.5">
+                {schemeResult.matches.slice(0, 4).map((m) => (
+                  <ReportSchemeRow key={m.scheme.id} m={m} />
+                ))}
+              </div>
+              <p className="mt-3 text-[10px] text-muted-foreground/70 leading-relaxed">
+                {schemeResult.disclaimer} {schemeResult.verifyNote}
+              </p>
+            </Section>
+          )}
+
           {/* Final Decision */}
           <Section title="Final Decision">
             <div className={cn(
@@ -280,6 +311,41 @@ export default function Report() {
       </main>
 
       <Footer />
+    </div>
+  );
+}
+
+function ReportSchemeRow({ m }: { m: SchemeMatch }) {
+  const chip =
+    m.level === "high"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : m.level === "possible"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-muted text-muted-foreground border-border";
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <p className="text-xs font-bold text-foreground">{m.scheme.name}</p>
+        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold tracking-wide ${chip}`}>
+          {m.level === "high" ? "HIGH MATCH" : m.level === "possible" ? "POSSIBLE MATCH" : "LOW MATCH"}
+        </span>
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-snug mt-1">{m.scheme.shortDescription}</p>
+      {m.reasons.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5">
+          {m.reasons.slice(0, 2).map((r, i) => (
+            <li key={i} className="text-[10px] text-muted-foreground flex items-start gap-1">
+              <span className="text-emerald-600 font-bold">✓</span> {r.text}
+            </li>
+          ))}
+        </ul>
+      )}
+      {m.level !== "high" && m.gaps.length > 0 && (
+        <p className="mt-1.5 text-[10px] text-amber-700 leading-snug">≈ {m.gaps[0].text}</p>
+      )}
+      {m.level === "low" && m.exclusions.length > 0 && (
+        <p className="mt-1.5 text-[10px] text-muted-foreground leading-snug">{m.exclusions[0].text}</p>
+      )}
     </div>
   );
 }
