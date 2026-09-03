@@ -4,15 +4,20 @@ import { ProgressStepper } from "@/components/ui/ProgressStepper";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useOnboarding } from "@/lib/onboarding-context";
 import { generateFeasibility } from "@/data/feasibility";
-import { locations, type Location } from "@/data/locations";
+import type { Location } from "@/data/locations";
 import { businessCategories, type BusinessCategory } from "@/data/businesses";
 import { formatIndianCurrency } from "@/data/assessment";
 import { getRecommendations } from "@/data/recommendations";
-import UPMap from "@/components/UPMap";
+import IndiaMap from "@/components/IndiaMap";
+import {
+  initLocationService, searchLocations, suggestLocations, curatedSuggestions, nearestLocations, registerHit,
+  getLoadState, type LocationHit, type GeoLoadState,
+} from "@/services/geo/locationService";
+import { loadDistrictBoundaries, resolveDistrict, adjacentDistricts, type DistrictFeature } from "@/services/geo/boundaries";
 import {
   MapPin, Search, Store, Lightbulb, IndianRupee,
   CheckCircle2, ArrowLeft, ArrowRight, Edit3, Check,
-  TrendingUp, X, Loader2, Sparkles,
+  TrendingUp, X, Loader2, Sparkles, Navigation, Database, AlertCircle, RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,18 +48,8 @@ function OnboardingInner() {
     setFeasibility, isAnalyzing, setIsAnalyzing,
   } = useOnboarding();
 
-  const [locationSearch, setLocationSearch] = useState("");
   const [businessSearch, setBusinessSearch] = useState("");
   const [capitalError, setCapitalError] = useState("");
-
-  const filteredLocations = useMemo(() => {
-    if (!locationSearch) return locations;
-    const q = locationSearch.toLowerCase();
-    return locations.filter(
-      (l) => l.name.toLowerCase().includes(q) || l.district.toLowerCase().includes(q) ||
-        l.state.toLowerCase().includes(q) || l.pincode.includes(q),
-    );
-  }, [locationSearch]);
 
   const filteredBusinesses = useMemo(() => {
     if (!businessSearch) return businessCategories;
@@ -144,8 +139,7 @@ function OnboardingInner() {
         <div className="w-full max-w-2xl">
           {step === 0 && (
             <LocationStep
-              search={locationSearch} onSearchChange={setLocationSearch}
-              locations={filteredLocations} selected={location} onSelect={setLocation}
+              selected={location} onSelect={setLocation}
               radius={radius} onRadiusChange={setRadius}
             />
           )}
@@ -195,64 +189,305 @@ function OnboardingInner() {
   );
 }
 
-/* ─── Step 1: Location with UP Map ─── */
-function LocationStep({ search, onSearchChange, locations: locs, selected, onSelect, radius, onRadiusChange }: {
-  search: string; onSearchChange: (s: string) => void; locations: Location[];
-  selected: Location | null; onSelect: (l: Location | null) => void;
-  radius: number; onRadiusChange: (r: number) => void;
+/* ─── Step 1: Location — real India map + nationwide search ─── */
+
+interface BoundaryState {
+  status: "idle" | "loading" | "ready" | "error";
+  progress?: number;
+  feature: DistrictFeature | null;
+  neighbors: DistrictFeature[];
+  viaContainment?: boolean;
+  note?: string;
+}
+
+function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
+  selected: Location | null;
+  onSelect: (l: Location) => void;
+  radius: number;
+  onRadiusChange: (r: number) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<LocationHit[]>([]);
+  const [geo, setGeo] = useState<GeoLoadState>(getLoadState());
+  const [pickNote, setPickNote] = useState<string | null>(null);
+  const [boundary, setBoundary] = useState<BoundaryState>({ status: "idle", feature: null, neighbors: [] });
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // ── dataset bootstrap (once per session) ──
+  useEffect(() => {
+    let cancelled = false;
+    const s = getLoadState();
+    setGeo(s.status === "ready" ? s : { status: "loading", progress: 0 });
+    setHits(curatedSuggestions(8));
+    if (s.status === "ready") {
+      setHits((prev) => (prev.length ? prev : suggestLocations(10)));
+      return;
+    }
+    initLocationService((pct) => {
+      if (!cancelled) setGeo({ status: "loading", progress: pct });
+    })
+      .then(() => {
+        if (!cancelled) {
+          setGeo(getLoadState());
+          setHits((prev) => (prev.length ? prev : suggestLocations(10)));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setGeo(getLoadState());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  // ── debounced nationwide search ──
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setHits(geo.status === "ready" ? suggestLocations(10) : curatedSuggestions(8));
+      return;
+    }
+    if (geo.status !== "ready") {
+      // while the directory loads, search within the curated demo towns
+      const cur = curatedSuggestions(8).filter((h) =>
+        `${h.title} ${h.district} ${h.state} ${h.pincode}`.toLowerCase().includes(q.toLowerCase()),
+      );
+      setHits(cur);
+      return;
+    }
+    const t = setTimeout(() => setHits(searchLocations(q, 18)), 180);
+    return () => clearTimeout(t);
+  }, [query, geo.status]);
+
+  // ── real district boundary resolution for the selected location ──
+  const locKey = selected ? `${selected.id}|${selected.lat}|${selected.lng}` : "";
+  useEffect(() => {
+    if (!selected) {
+      setBoundary({ status: "idle", feature: null, neighbors: [] });
+      return;
+    }
+    let cancelled = false;
+    setBoundary((b) => ({ ...b, status: "loading", progress: 0 }));
+    (async () => {
+      try {
+        const features = await loadDistrictBoundaries((pct) => {
+          if (!cancelled) setBoundary((b) => ({ ...b, progress: pct }));
+        });
+        if (cancelled) return;
+        const resolved = resolveDistrict(features, {
+          district: selected.district,
+          state: selected.state,
+          lat: selected.lat,
+          lng: selected.lng,
+        });
+        if (!resolved) {
+          setBoundary({
+            status: "error",
+            feature: null,
+            neighbors: [],
+            note: "District boundary not found for this selection.",
+          });
+          return;
+        }
+        const neighbors = adjacentDistricts(features, resolved.feature, 8);
+        const viaContainment = resolved.via === "containment";
+        setBoundary({
+          status: "ready",
+          feature: resolved.feature,
+          neighbors,
+          viaContainment,
+          note: viaContainment
+            ? `Shown: ${resolved.feature.name} district (newer splits may not exist in the boundary dataset)`
+            : undefined,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setBoundary({
+          status: "error",
+          feature: null,
+          neighbors: [],
+          note: err instanceof Error && err.message ? err.message : "District boundary could not be loaded.",
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [locKey]);
+
+  const applyHit = useCallback((hit: LocationHit) => {
+    registerHit(hit);
+    onSelect(hit.location);
+    setPickNote(null);
+  }, [onSelect]);
+
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    if (geo.status !== "ready") {
+      setPickNote("Loading the location directory — try again in a moment.");
+      return;
+    }
+    const near = nearestLocations(lat, lng, 30);
+    if (near.length === 0) {
+      setPickNote("No post office within 30 km of that point — choose a location from the search list.");
+      return;
+    }
+    applyHit(near[0]);
+    setQuery(near[0].title);
+    setPickNote(`Selected nearest post office: ${near[0].title}, ${near[0].district}`);
+  }, [geo.status, applyHit]);
+
+  const datasetLoading = geo.status === "loading";
+  const datasetError = geo.status === "error";
+
+  const selectedPoint = selected
+    ? { lat: selected.lat, lng: selected.lng, label: selected.name, sublabel: `${selected.district}, ${selected.state}` }
+    : null;
+
   return (
     <div className="animate-fade-in">
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
           <MapPin className="h-6 w-6" />
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold">Where do you want to start your business?</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Select your village, town or block — we will analyze the local market around it
+          Search any village, town or city across India — we will analyze the local market around it
         </p>
       </div>
 
       {/* Search */}
-      <div className="relative mb-4">
+      <div className="relative mb-3">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <input type="text" value={search} onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search by village, town, district or PIN code..."
-          className="w-full rounded-xl border border-border bg-white py-3 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by PIN code, village, town or district across India…"
+          className="w-full rounded-xl border border-border bg-white py-3 pl-10 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+        />
+        {query && (
+          <button onClick={() => setQuery("")} aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      {/* UP Map */}
-      <UPMap
-        selectedDistrict={selected?.district}
-        selectedTown={selected?.name}
-        radius={radius}
-        className="h-48 sm:h-56 mb-4"
+      {/* dataset status */}
+      {datasetLoading && (
+        <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 text-primary animate-spin" />
+          <span className="flex-1">Loading All India location directory (PIN codes, villages, towns)…</span>
+          {geo.progress != null && geo.progress > 0 && (
+            <span className="font-semibold text-primary">{geo.progress}%</span>
+          )}
+        </div>
+      )}
+      {datasetError && (
+        <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span className="flex-1">Location data could not be loaded. Showing demo towns only.</span>
+          <button onClick={() => setReloadKey((k) => k + 1)}
+            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1 font-semibold text-red-600 hover:bg-red-50 transition-colors">
+            <RotateCcw className="h-3 w-3" /> Retry
+          </button>
+        </div>
+      )}
+      {geo.status === "ready" && (
+        <p className="mb-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Database className="h-3 w-3" />
+          All India Pincode Directory loaded — {geo.total.toLocaleString("en-IN")} post offices, every state &amp; UT
+        </p>
+      )}
+
+      {/* Map */}
+      <IndiaMap
+        point={selectedPoint}
+        radiusKm={selected ? radius : undefined}
+        district={boundary.feature}
+        neighbors={boundary.neighbors}
+        onMapClick={handleMapClick}
+        className="h-72 sm:h-80 mb-2"
       />
 
-      {/* Location list */}
-      <div className="max-h-[280px] overflow-y-auto rounded-xl border border-border mb-4 divide-y divide-border/50">
-        {locs.map((loc) => (
-          <button key={loc.id} onClick={() => onSelect(loc)}
-            className={cn("w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-muted/50",
-              selected?.id === loc.id && "bg-primary/5 border-l-2 border-primary",
-            )}>
-            <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg transition-all",
-              selected?.id === loc.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-            )}>
-              <MapPin className="h-4 w-4" />
+      {/* Boundary status row */}
+      {selected && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px]">
+          <span className="inline-flex items-center gap-1.5 font-medium text-[#1a3a2a]">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            {selected.name} · {selected.district}, {selected.state} · PIN {selected.pincode}
+          </span>
+          {boundary.status === "loading" && (
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {boundary.progress != null && boundary.progress > 0 ? `Loading district boundary… ${boundary.progress}%` : "Finding district boundary…"}
+            </span>
+          )}
+          {boundary.status === "ready" && boundary.feature && (
+            <span className="text-muted-foreground">
+              {boundary.neighbors.length} nearby districts {boundary.viaContainment ? "· " + boundary.note : ""}
+            </span>
+          )}
+          {boundary.status === "error" && (
+            <span className="text-amber-600">District boundary unavailable — marker &amp; radius still shown</span>
+          )}
+        </div>
+      )}
+      {pickNote && (
+        <p className="mb-2 px-1 text-[11px] text-muted-foreground">📍 {pickNote}</p>
+      )}
+
+      {/* Location result list */}
+      <div className="mb-4">
+        <div className="mb-1.5 flex items-center justify-between px-1">
+          <p className="text-xs font-semibold text-muted-foreground">
+            {query.trim() ? "Search results" : "Suggested locations"}
+          </p>
+          {!query.trim() && geo.status === "ready" && (
+            <p className="text-[10px] text-muted-foreground">Try “242001”, “Shahjahanpur”, “Mumbai”…</p>
+          )}
+        </div>
+        <div className="max-h-56 overflow-y-auto rounded-xl border border-border divide-y divide-border/50">
+          {hits.map((hit) => (
+            <button
+              key={hit.key}
+              onClick={() => { applyHit(hit); setQuery(hit.title); }}
+              className={cn("w-full flex items-center gap-3 px-4 py-3 text-left transition-all hover:bg-muted/50",
+                selected?.id === hit.key && "bg-primary/5 border-l-2 border-primary",
+              )}
+            >
+              <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg transition-all",
+                selected?.id === hit.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+              )}>
+                <MapPin className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">{hit.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{hit.subtitle}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                  {hit.typeLabel}{hit.isCurated ? " · demo" : ""}
+                </span>
+                <span className="text-[10px] font-semibold text-[#4a6a5a]">{hit.pincode}</span>
+              </div>
+              {selected?.id === hit.key && (
+                <Check className="h-4 w-4 text-primary flex-shrink-0" style={{ animation: "checkPop 0.3s ease-out" }} />
+              )}
+            </button>
+          ))}
+          {hits.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              {datasetLoading
+                ? "Searching across India…"
+                : "No matching Indian location found. Try a different spelling or PIN code."}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground truncate">{loc.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{loc.district}, {loc.state} • {loc.pincode}</p>
-            </div>
-            {selected?.id === loc.id && (
-              <Check className="h-4 w-4 text-primary flex-shrink-0" style={{ animation: "checkPop 0.3s ease-out" }} />
-            )}
-            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{loc.type}</span>
-          </button>
-        ))}
-        {locs.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No locations found. Try a different search.</div>
+          )}
+        </div>
+        {!query.trim() && geo.status !== "ready" && (
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
+            Demo towns are available while the full India directory loads.
+          </p>
         )}
       </div>
 
@@ -269,6 +504,10 @@ function LocationStep({ search, onSearchChange, locations: locs, selected, onSel
             </button>
           ))}
         </div>
+        <p className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <Navigation className="h-3 w-3" />
+          Tap anywhere on the map to snap to the nearest post office
+        </p>
       </div>
     </div>
   );
