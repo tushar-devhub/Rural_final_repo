@@ -7,26 +7,20 @@
 export const QUICK_LOAD_TIMEOUT_MS = 15_000; // pin index — search must not wait longer
 export const FULL_LOAD_TIMEOUT_MS = 30_000; // full directory — background enrichment
 
+/** AbortSignal that fires after timeoutMs (works where AbortSignal.timeout is missing). */
+export function timeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(timeoutMs);
+  }
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), timeoutMs);
+  ctrl.signal.addEventListener("abort", () => clearTimeout(id), { once: true });
+  return ctrl.signal;
+}
+
 function resolveSignal(signal?: AbortSignal, timeoutMs?: number): AbortSignal | undefined {
   if (!timeoutMs) return signal;
-  // AbortSignal.timeout isn't in every browser — fall back to a timer abort.
-  const timeout =
-    typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-      ? AbortSignal.timeout(timeoutMs)
-      : null;
-  if (!timeout) {
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), timeoutMs);
-    ctrl.signal.addEventListener(
-      "abort",
-      () => clearTimeout(id),
-      { once: true },
-    );
-    if (!signal) return ctrl.signal;
-    const on = () => ctrl.abort();
-    signal.addEventListener("abort", on, { once: true });
-    return ctrl.signal;
-  }
+  const timeout = timeoutSignal(timeoutMs);
   if (!signal) return timeout;
   // Both: whichever fires first aborts.
   const ctrl = new AbortController();

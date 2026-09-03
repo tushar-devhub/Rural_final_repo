@@ -372,6 +372,17 @@ function LocationStep({ selected, onSelect, radius, onRadiusChange }: {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter on a full PIN (or a single strong hit) places it on the map directly.
+            if (e.key === "Enter" && hits.length > 0) {
+              const q = query.trim();
+              if (/^\d{6}$/.test(q) || hits.length === 1) {
+                e.preventDefault();
+                applyHit(hits[0]);
+                setQuery(hits[0].title);
+              }
+            }
+          }}
           placeholder="Search by PIN code, village, town or district across India…"
           className="w-full rounded-xl border border-border bg-white py-3 pl-10 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
         />

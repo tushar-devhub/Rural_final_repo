@@ -1,27 +1,29 @@
 // ─── Build: compact pin-level location index ───
 // Reads the full All-India directory (public/pincodes.json.gz) and writes a
-// much smaller "pin heads" index (public/loc/pin-heads.json.gz):
+// much smaller "pin heads" index (public/loc/pin-heads.json):
 //
 //   • ONE record per pincode — the best office/locality for that pincode
 //     (GPO > HO > SO > BO, coords preferred, most office instances wins).
 //   • Records keep the same short-key shape as the full directory
 //     ({p,o,i,s,t,a,n}) so the existing normalizeRecord() pipeline works.
+//   • Plain JSON (no gzip): the critical search tier must not depend on
+//     DecompressionStream/streaming fetch support in the host browser.
 //
-// The result (~19.5k rows ≈ 300 KB gz vs 3.3 MB for the full directory) is
-// the tier that makes search available immediately. The full directory is
-// still shipped and loaded in the background for complete locality coverage.
+// The result (~19.5k rows, ~1.8 MB plain JSON) is the tier that makes search
+// available immediately. The full directory is still shipped (gzipped) and
+// loaded in the background as best-effort enrichment.
 //
 // Usage:  bun scripts/build-pin-index.mjs
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { gunzipSync, gzipSync } from "node:zlib";
+import { gunzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const srcPath = join(root, "public", "pincodes.json.gz");
 const outDir = join(root, "public", "loc");
-const outPath = join(outDir, "pin-heads.json.gz");
+const outPath = join(outDir, "pin-heads.json");
 
 const raw = JSON.parse(gunzipSync(readFileSync(srcPath)).toString());
 
@@ -88,9 +90,8 @@ for (const [p, list] of pinMap) {
 }
 
 const bytes = Buffer.from(JSON.stringify(out));
-const gz = gzipSync(bytes, { level: 9 });
 mkdirSync(outDir, { recursive: true });
-writeFileSync(outPath, gz);
+writeFileSync(outPath, bytes);
 
 console.log(`pin-heads: ${out.length} rows (${pinMap.size} pincodes), ${coords} with coords`);
-console.log(`raw ${(bytes.length / 1024).toFixed(0)} KB → gz ${(gz.length / 1024).toFixed(0)} KB → ${outPath}`);
+console.log(`plain JSON ${(bytes.length / 1024).toFixed(0)} KB → ${outPath}`);
