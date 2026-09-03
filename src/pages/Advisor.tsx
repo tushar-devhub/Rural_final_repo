@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useOnboarding } from "@/lib/onboarding-context";
-import { formatIndianCurrency } from "@/data/assessment";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import {
@@ -11,123 +10,54 @@ import {
   Home,
   ChevronRight,
   Sparkles,
+  Mic,
+  Check,
 } from "lucide-react";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
+import { generateAdvisorReply, runFeasibility } from "@/services/advisor/engine";
+import type { AdvisorStateChange } from "@/services/advisor/engine";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  appliedNote?: string | null;
   timestamp: Date;
 }
 
-function getSuggestedQuestions(
-  businessName: string,
-  locationName: string,
-  capital: number,
-  verdict: string,
-): string[] {
-  const questions: string[] = [];
-
-  if (verdict === "good") {
-    questions.push("Why does this business show good potential?");
-  } else if (verdict === "caution") {
-    questions.push("What are the main risks I should watch out for?");
-  } else {
-    questions.push("Should I consider a different business?");
-  }
-
-  questions.push(
-    `What if I invest ₹${Math.round(capital * 0.5 / 1000)}K instead of ₹${Math.round(capital / 1000)}K?`,
-    "Which customer groups should I target first?",
-    "Can I comfortably repay this loan?",
-    `Why is competition important in ${locationName}?`,
-  );
-
-  return questions;
-}
-
-function generateAIResponse(
-  question: string,
-  businessName: string,
-  locationName: string,
-  capital: number,
-  feasibility: ReturnType<typeof useOnboarding>["feasibility"],
-): string {
-  const q = question.toLowerCase();
-  const f = feasibility;
-
-  if (q.includes("why") && q.includes("potential")) {
-    return `Based on the analysis for ${businessName} in ${locationName}:\n\nYour business shows ${f?.verdict === "good" ? "strong" : "moderate"} potential because:\n\n1. Market Reach: The area has approximately ${f?.marketReach.households?.toLocaleString("en-IN") || "4,200"} households within reach, providing a solid customer base.\n\n2. Competition: With ${f?.competition.totalBusinesses || "18"} existing competitors, the density is ${f?.competition.density || "moderate"}. ${f?.competition.density === "low" ? "This means less competition to worry about." : "You will need to differentiate your offering."}\n\n3. Financial Structure: Your ₹${(capital / 1000).toFixed(0)}K contribution through ${f?.financial.recommendedScheme || "the recommended scheme"} creates a manageable repayment structure.\n\nRemember: This analysis is based on simulated market data for demonstration purposes.`;
-  }
-
-  if (q.includes("risk") || q.includes("watch out")) {
-    const risks = f?.risks || [];
-    if (risks.length === 0) {
-      return "The analysis did not identify major risks for this scenario. However, every business carries inherent risks such as market changes, supply disruptions, and seasonal demand variations.";
-    }
-    return `Here are the key risks identified for ${businessName}:\n\n${risks.map((r, i) => `${i + 1}. ${r.name} (${r.severity.toUpperCase()}): ${r.explanation}\n   Mitigation: ${r.mitigation}`).join("\n\n")}\n\nThe overall risk score is ${f?.subScores?.riskScore || "N/A"}/100. ${f?.subScores?.riskScore && f.subScores.riskScore >= 70 ? "This is within acceptable range." : "This area deserves careful attention."}`;
-  }
-
-  if (q.includes("invest") || q.includes("capital") || q.includes("₹")) {
-    const newCapital = capital * 0.5;
-    const projectCost = newCapital / 0.1;
-    return `If you reduce your contribution to ₹${newCapital.toLocaleString("en-IN")}:\n\n• Project Cost would be: ₹${projectCost.toLocaleString("en-IN")} (at 10% contribution)\n• This falls within the ${projectCost <= 140000 ? "Micro Finance scheme (max ₹1.25L)" : "Term Loan scheme (max ₹45L)"}\n• Your loan would be approximately ₹${(projectCost * 0.9).toLocaleString("en-IN")}\n\n⚠️ A lower contribution means a smaller initial setup. Consider whether this covers your essential equipment and inventory needs.\n\nThe financial engine can recalculate this for you with exact numbers.`;
-  }
-
-  if (q.includes("customer") || q.includes("target")) {
-    const groups = f?.marketReach.customerGroups || [];
-    return `Based on the market analysis for ${locationName}:\n\nPrimary customer groups to target:\n${groups.map((g, i) => `${i + 1}. ${g}`).join("\n")}\n\nRecommended approach:\n• Start with the highest-relevance group (${groups[0] || "Households"})\n• Build trust through consistent quality and fair pricing\n• Expand to adjacent groups once established\n• Consider weekly haat (market day) for wider reach`;
-  }
-
-  if (q.includes("repay") || q.includes("loan") || q.includes("emi")) {
-    const afford = f?.financial.affordability;
-    if (!afford) {
-      return "I cannot assess repayment comfort without financial data. Please run an assessment first.";
-    }
-    return `Repayment analysis for your ${f?.financial.recommendedScheme || "scheme"}:\n\n• Monthly Repayment: ~₹${afford.monthlyRepayment.toLocaleString("en-IN")}\n• Expected Monthly Revenue: ₹${afford.expectedRevenue.toLocaleString("en-IN")}\n• Operating Costs: ₹${afford.operatingCosts.toLocaleString("en-IN")}\n• Monthly Cash Flow: ₹${afford.cashFlow.toLocaleString("en-IN")}\n\nRating: ${afford.ratingIcon} ${afford.ratingLabel}\n\n${afford.rating === "comfortable" ? "Your expected cash flow comfortably covers the loan repayment. This is a positive sign." : afford.rating === "tight" ? "The repayment is manageable but leaves limited margin. Careful cost control will be important." : "The repayment burden is high relative to expected revenue. Consider reducing the loan amount or exploring alternative financing."}`;
-  }
-
-  if (q.includes("competition") || q.includes("competitor")) {
-    return `Competition analysis for ${businessName} in ${locationName}:\n\n${f?.competition.totalBusinesses || "N"} competing businesses found within the analysis radius.\n\nCompetition density: ${f?.competition.density?.toUpperCase() || "MEDIUM"}\n\nKey competitors:\n${f?.competition.competitors.slice(0, 5).map((c) => `• ${c.name} (${c.type}) — ${c.distance}`).join("\n") || "• Analysis data loading..."}\n\nTo compete effectively:\n1. Differentiate through service quality and reliability\n2. Offer products/services competitors don't\n3. Build customer loyalty through consistent experience\n4. Consider competitive pricing for initial market entry`;
-  }
-
-  if (q.includes("different business") || q.includes("another business") || q.includes("alternative")) {
-    const alts = f?.opportunity.alternatives || [];
-    return `If you are considering alternatives to ${businessName}:\n\nSuggested alternatives based on your location:\n${alts.length > 0 ? alts.map((a, i) => `${i + 1}. ${a}`).join("\n") : "1. Organic produce supply\n2. Cold storage services\n3. Digital payment services"}\n\nThe market gap analysis shows: ${f?.opportunity.underserved || "underserved categories exist in your area."}\n\nYou can use the What-If Simulator to compare different business options with the same location and capital.`;
-  }
-
-  // Default response
-  return `Based on your assessment of ${businessName} in ${locationName} with ₹${(capital / 1000).toFixed(0)}K contribution:\n\nThe overall feasibility score is ${f?.overallScore || "N/A"}/100 with a verdict of "${f?.verdictLabel || "Analyzing"}".\n\n${f?.decision?.summary || "The analysis covers market reach, competition, risks, financial structure and recommended next steps."}\n\nFeel free to ask about specific aspects like:\n• Market reach and customer groups\n• Competition and pricing\n• Financial structure and repayment\n• Risks and mitigations\n• Alternative business options`;
-}
+const DEFAULT_SUGGESTIONS: string[] = [
+  "Why is my score what it is?",
+  "Which business is better for me?",
+  "How much loan do I need?",
+  "Which government scheme may help?",
+  "What should I do next?",
+  "मेरे पास 2 लाख हैं, गाँव में dairy शुरू करना है",
+];
 
 export default function Advisor() {
-  const { feasibility, location, business, capital } = useOnboarding();
+  const {
+    feasibility, location, business, capital,
+    setLocation, setBusiness, setCapital, setFeasibility,
+  } = useOnboarding();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>(DEFAULT_SUGGESTIONS);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
-  const businessName = business?.name || "your business";
+  const businessName = business?.name || (location ? "your business" : "your business");
   const locationName = location ? `${location.name}, ${location.district}` : "your location";
-  const suggestedQuestions = getSuggestedQuestions(
-    businessName,
-    locationName,
-    capital,
-    feasibility?.verdict || "caution",
-  );
 
-  const handleSend = async (text?: string) => {
-    const question = text || input.trim();
+  const handleSend = useCallback(async (text?: string) => {
+    const question = (text ?? input).trim();
     if (!question) return;
 
     const userMsg: Message = {
@@ -136,32 +66,50 @@ export default function Advisor() {
       content: question,
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setIsTyping(true);
+    setSuggestions([]);
 
-    // Simulate AI response delay
-    await new Promise((resolve) => setTimeout(resolve, 1200 + Math.random() * 800));
+    const reply = generateAdvisorReply({
+      message: question,
+      context: { location, business, capital, feasibility },
+    });
 
-    const response = generateAIResponse(
-      question,
-      businessName,
-      locationName,
-      capital,
-      feasibility,
-    );
+    // Sync asserted changes into shared context (single source of truth)
+    if (reply.apply?.recompute) {
+      if (reply.apply.business) setBusiness(reply.apply.business);
+      if (reply.apply.capital !== undefined) setCapital(reply.apply.capital);
+      if (reply.apply.location) setLocation(reply.apply.location);
+      const b = reply.apply.business ?? business;
+      const c = reply.apply.capital !== undefined ? reply.apply.capital : capital;
+      const l = reply.apply.location ?? location;
+      const f = runFeasibility(b, c, l);
+      if (f) setFeasibility(f);
+    }
 
     const aiMsg: Message = {
       id: (Date.now() + 1).toString(),
       role: "assistant",
-      content: response,
+      content: reply.text,
+      appliedNote: reply.apply?.summary ?? null,
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, aiMsg]);
-    setIsTyping(false);
-  };
+
+    if (reply.followups.length > 0) {
+      setSuggestions(reply.followups);
+    } else {
+      setSuggestions(DEFAULT_SUGGESTIONS.slice(0, 4));
+    }
+  }, [input, location, business, capital, feasibility, setLocation, setBusiness, setCapital, setFeasibility]);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleVoiceDraft = useCallback(() => {
+    // The floating advisor owns the microphone; focus the text input here and
+    // hint the user toward the mic bubble.
+    inputRef.current?.focus();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -194,9 +142,10 @@ export default function Advisor() {
               </p>
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground/60 ml-13">
-            🤖 Responses are based on your assessment data. Always verify critical financial decisions.
-          </p>
+          <div className="mt-2 rounded-xl border border-border/70 bg-white px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            🎤 बोलकर पूछने के लिए नीचे दाएँ <Mic className="inline h-3 w-3" /> button दबाएँ — यहाँ लिखकर भी पूछ सकते हैं (Hindi / Hinglish / English)।
+            सभी जवाब आपके current RuralBiz analysis और financial engine से निकलते हैं।
+          </div>
         </div>
 
         {/* Chat Area */}
@@ -211,9 +160,18 @@ export default function Advisor() {
                 <h3 className="text-base font-bold text-foreground mb-1">
                   Ask me anything about your business assessment
                 </h3>
-                <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                  I understand your location, business type, capital, market data and financial structure. Ask me to explain any part of the analysis.
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  I understand your location, business type, capital, market data and financial structure.
+                  Answers come from your actual analysis — not a generic chatbot.
                 </p>
+                {feasibility && (
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-semibold text-emerald-700">
+                      Loaded: {business?.name ?? "—"} · {feasibility.overallScore}/100 ({feasibility.verdictLabel})
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -239,7 +197,13 @@ export default function Advisor() {
                       : "bg-muted text-foreground rounded-bl-md",
                   )}
                 >
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                  {msg.appliedNote && (
+                    <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-semibold">
+                      <Check className="h-3 w-3" />
+                      {msg.appliedNote} — analysis updated
+                    </div>
+                  )}
                 </div>
                 {msg.role === "user" && (
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground flex-shrink-0 mt-1">
@@ -249,35 +213,19 @@ export default function Advisor() {
               </div>
             ))}
 
-            {/* Typing Indicator */}
-            {isTyping && (
-              <div className="flex gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
-                  <Bot className="h-3.5 w-3.5" />
-                </div>
-                <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
-                  <div className="flex gap-1">
-                    <div className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <div className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <div className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Suggested Questions */}
-          {messages.length === 0 && (
+          {/* Suggestions */}
+          {suggestions.length > 0 && (
             <div className="px-4 pb-3 border-t border-border/50 pt-3">
               <p className="text-[10px] font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
                 Suggested Questions
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {suggestedQuestions.map((q, i) => (
+                {suggestions.map((q) => (
                   <button
-                    key={i}
+                    key={q}
                     onClick={() => handleSend(q)}
                     className="rounded-full border border-border px-3 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-primary/5 hover:text-primary hover:border-primary/20 transition-colors"
                   >
@@ -292,27 +240,35 @@ export default function Advisor() {
           <div className="border-t border-border p-3 sm:p-4">
             <div className="flex items-center gap-2">
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder="Ask about your business assessment..."
+                placeholder="Ask about your business analysis… (Hindi / Hinglish / English)"
                 className="flex-1 rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                disabled={isTyping}
               />
               <button
                 onClick={() => handleSend()}
-                disabled={!input.trim() || isTyping}
+                disabled={!input.trim()}
                 className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
-                  input.trim() && !isTyping
+                  input.trim()
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "bg-muted text-muted-foreground",
                 )}
+                aria-label="Send question"
               >
                 <Send className="h-4 w-4" />
               </button>
             </div>
+            <button
+              onClick={handleVoiceDraft}
+              className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
+            >
+              <Mic className="h-3 w-3" />
+              बोलकर पूछना है? नीचे दाएँ "AI Advisor" bubble में 🎙️ दबाएँ
+            </button>
           </div>
         </div>
 

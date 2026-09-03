@@ -11,24 +11,23 @@ export interface AssessmentData {
 export function formatIndianCurrency(amount: number): string {
   if (amount === 0) return "₹0";
 
-  const str = Math.round(amount).toString();
-  let result = "";
-  let count = 0;
+  // Indian numbering: last 3 digits grouped, then groups of 2 (1,00,000 style)
+  const negative = amount < 0;
+  const digits = Math.round(Math.abs(amount)).toString();
+  const prefix = negative ? "-₹" : "₹";
 
-  for (let i = str.length - 1; i >= 0; i--) {
-    count++;
-    if (count === 1) {
-      result = str[i] + result;
-    } else if (count <= 3) {
-      result = str[i] + result;
-    } else if (count % 2 === 1) {
-      result = str[i] + "," + result;
-    } else {
-      result = str[i] + "," + result;
-    }
+  if (digits.length <= 3) return prefix + digits;
+
+  const last3 = digits.slice(-3);
+  let rest = digits.slice(0, -3);
+  const groups: string[] = [];
+  while (rest.length > 2) {
+    groups.unshift(rest.slice(-2));
+    rest = rest.slice(0, -2);
   }
+  groups.unshift(rest);
 
-  return "₹" + result.replace(/^,/, "").replace(/,(\d{3})/g, ",$1");
+  return prefix + groups.join(",") + "," + last3;
 }
 
 export function formatCompactCurrency(amount: number): string {
