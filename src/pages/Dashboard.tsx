@@ -782,6 +782,23 @@ function FinancialOverviewSection({ f }: { f: any }) {
           Financial calculations are deterministic and based on PMEGP/MUDRA scheme rules
         </p>
       </div>
+
+      {/* Loan application entry */}
+      <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-primary/10 bg-primary/[0.03] p-3.5">
+        <div className="flex-1">
+          <p className="text-xs font-bold text-foreground">Prepare your loan application</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Pre-fill an editable application draft from this financial structure and your matched schemes.
+          </p>
+        </div>
+        <Link
+          to="/application"
+          className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Prepare Loan Application
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
     </SectionCard>
   );
 }

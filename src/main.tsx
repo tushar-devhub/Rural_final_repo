@@ -22,6 +22,7 @@ const Advisor = lazy(() => import("./pages/Advisor.tsx"));
 const WhatIf = lazy(() => import("./pages/WhatIf.tsx"));
 const Compare = lazy(() => import("./pages/Compare.tsx"));
 const Report = lazy(() => import("./pages/Report.tsx"));
+const Application = lazy(() => import("./pages/Application.tsx"));
 
 // Loading fallback
 function RouteLoading() {
@@ -145,6 +146,14 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/what-if" element={<WhatIf />} />
               <Route path="/compare" element={<Compare />} />
               <Route path="/report" element={<Report />} />
+              <Route
+                path="/application"
+                element={
+                  <RequireAuth>
+                    <Application />
+                  </RequireAuth>
+                }
+              />
               <Route path="/saved" element={<Placeholder type="saved" />} />
               <Route path="/settings" element={<Placeholder type="settings" />} />
               <Route path="*" element={<NotFound />} />

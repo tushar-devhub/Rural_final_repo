@@ -27,7 +27,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 /* ─── Level helpers ─── */
 
@@ -379,116 +379,6 @@ function SchemeDetailDialog({
   );
 }
 
-/* ─── Application draft dialog ─── */
-
-function buildDraftText(m: SchemeMatch, profile: SchemeMatchResult): string {
-  const p = profile.profile;
-  const s = m.scheme;
-  const lines: string[] = [];
-  lines.push("RURALBIZ AI — APPLICATION PREPARATION (not a submission form)");
-  lines.push("=".repeat(62));
-  lines.push("");
-  lines.push("Business profile used for this draft");
-  lines.push("-------------------------------------");
-  lines.push(`Business idea: ${p.businessName}`);
-  lines.push(`Location: ${p.district}, ${p.state}`);
-  lines.push(`Entrepreneur contribution: ${formatIndianCurrency(p.contribution)}`);
-  lines.push(`Estimated project cost: ${formatIndianCurrency(p.projectCost)}`);
-  lines.push(`Estimated external financing required: ${formatIndianCurrency(p.fundingRequirement)}`);
-  lines.push("");
-  lines.push(`Potential scheme being explored: ${s.name}`);
-  lines.push("-------------------------------------");
-  s.supportStructure.forEach((d) => {
-    lines.push(`${d.label}: ${d.text}`);
-  });
-  lines.push("");
-  lines.push("Points to confirm with the bank / implementing authority");
-  lines.push("-------------------------------------");
-  m.gaps.forEach((g) => lines.push(`≈ ${g.text}`));
-  lines.push("");
-  lines.push("Documents commonly requested");
-  lines.push("-------------------------------------");
-  s.requiredDocuments.forEach((d) => lines.push(`• ${d}`));
-  lines.push("");
-  lines.push("Next steps");
-  lines.push("-------------------------------------");
-  s.applicationProcess.forEach((p2, i) => lines.push(`${i + 1}. ${p2}`));
-  lines.push("");
-  lines.push(`Official source: ${s.officialSource.name} — ${s.officialSource.url}`);
-  lines.push("");
-  lines.push("DISCLAIMER: This draft is for preparation only. It is NOT an application and");
-  lines.push("does not confirm eligibility, subsidy, loan approval or scheme benefits.");
-  return lines.join("\n");
-}
-
-function DraftDialog({ m, result, onClose }: { m: SchemeMatch; result: SchemeMatchResult; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-  const text = useMemo(() => buildDraftText(m, result), [m, result]);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // Clipboard unavailable — text stays visible for manual selection.
-    }
-  };
-
-  return (
-    <DialogShell onClose={onClose} label="Application preparation draft">
-      <div className="flex items-start justify-between gap-3 border-b border-border px-5 sm:px-6 py-4 sticky top-0 bg-white rounded-t-2xl z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <FileText className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-base font-bold text-foreground leading-tight">Application Preparation</h3>
-            <p className="text-xs text-muted-foreground">
-              Potential scheme: {m.scheme.name} — for your preparation only
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          aria-label="Close draft"
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="px-5 sm:px-6 py-5">
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 mb-4">
-          <p className="flex items-start gap-2 text-xs text-amber-800 leading-relaxed">
-            <ShieldAlert className="h-4 w-4 flex-shrink-0 mt-px" />
-            <span>
-              This is an <strong>application preparation draft</strong>, not a real application and not a
-              submission to any bank or government office. Eligibility and approval are decided only by the
-              relevant lender/authority.
-            </span>
-          </p>
-        </div>
-        <pre className="whitespace-pre-wrap rounded-xl border border-border bg-muted/40 p-4 text-[11px] leading-relaxed text-foreground/80 font-mono max-h-[46vh] overflow-y-auto">{text}</pre>
-        <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
-          <button
-            onClick={copy}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copied to clipboard" : "Copy draft"}
-          </button>
-          <button
-            onClick={onClose}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </DialogShell>
-  );
-}
-
 /* ─── Small block header ─── */
 
 function Block({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
@@ -507,8 +397,8 @@ function Block({ icon, title, children }: { icon: React.ReactNode; title: string
 
 export default function SchemesSection() {
   const { feasibility, location, business, capital } = useOnboarding();
+  const navigate = useNavigate();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [draftId, setDraftId] = useState<string | null>(null);
   const [showHow, setShowHow] = useState(false);
   const [filter, setFilter] = useState<string>("all");
 
@@ -673,16 +563,8 @@ export default function SchemesSection() {
           onClose={() => setActiveId(null)}
           onDraft={(m) => {
             setActiveId(null);
-            setDraftId(m.scheme.id);
+            navigate(`/application?scheme=${encodeURIComponent(m.scheme.id)}`);
           }}
-        />
-      )}
-      {draftId && (
-        <DraftDialog
-          key={draftId}
-          m={result.matches.find((x) => x.scheme.id === draftId) ?? top!}
-          result={result}
-          onClose={() => setDraftId(null)}
         />
       )}
     </div>

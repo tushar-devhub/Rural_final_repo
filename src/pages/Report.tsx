@@ -232,6 +232,20 @@ export default function Report() {
               </div>
             )}
             <div className="mt-2"><DataConfidenceBadge type="verified" /></div>
+
+            {/* Loan application entry */}
+            <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-primary/10 bg-primary/[0.03] p-3.5">
+              <p className="flex-1 text-[11px] text-muted-foreground leading-relaxed">
+                Use this financial structure to prepare an <span className="font-semibold text-foreground">editable loan application draft</span> (AI-generated, for preparation only).
+              </p>
+              <Link
+                to="/application"
+                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Prepare Loan Application
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </Section>
 
           {/* Potential Government Schemes */}

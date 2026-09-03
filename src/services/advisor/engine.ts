@@ -435,6 +435,70 @@ function buildLoanAnswer(lang: AdvisorLang, f: FeasibilityData): string {
   return `${schemeLine} ${loanLine}${detailLine}${affordLine}${caveat}`;
 }
 
+/** Loan-application workflow guidance grounded in the current analysis. */
+function buildLoanApplicationAnswer(lang: AdvisorLang, ctx: AdvisorContext): { text: string; followups: string[] } {
+  const f = ctx.feasibility;
+  if (!f || !ctx.location || !ctx.business) {
+    return {
+      text: pick(
+        lang,
+        "Loan application draft बनाने के लिए पहले अपनी business analysis पूरी करें — dashboard के Financial Overview से आप editable draft तैयार कर सकते हैं।",
+        "Loan application draft banane ke liye pehle apni business analysis poori karein — dashboard ke Financial Overview se aap editable draft taiyaar kar sakte hain.",
+        "To prepare a loan application draft, first complete your business analysis — you can build an editable draft from the Financial Overview on your dashboard.",
+      ),
+      followups: [],
+    };
+  }
+
+  const fin = f.financial;
+  const br = fin.projectCostBreakdown;
+  const compliant = br?.isLimitExceeded && br.compliantProjectCost != null;
+  const projectCost = compliant ? (br?.compliantProjectCost ?? fin.totalProjectCost) : fin.totalProjectCost;
+  const contribution = br?.entrepreneurContribution ?? fin.availableContribution ?? ctx.capital;
+
+  // Top matched scheme for the document checklist context.
+  const match = (() => {
+    try {
+      const r = matchSchemesForProfileSource({
+        businessId: ctx.business!.id,
+        businessName: ctx.business!.name,
+        businessCategory: ctx.business!.category,
+        state: ctx.location!.state,
+        district: ctx.location!.district,
+        contribution,
+        projectCost: fin.totalProjectCost,
+        fundingRequirement: fin.potentialLoan,
+      });
+      return r.topMatch;
+    } catch {
+      return null;
+    }
+  })();
+
+  const schemePart = match
+    ? pick(
+        lang,
+        `आपके profile से ${match.scheme.name} एक potentially relevant option है (preliminary ${match.level.toUpperCase()} match)। इसके आम documents में शामिल हैं: ${match.scheme.requiredDocuments.slice(0, 4).join("; ")}।`,
+        `Aapke profile se ${match.scheme.name} ek potentially relevant option hai (preliminary ${match.level.toUpperCase()} match). Iske aam documents mein shamil hain: ${match.scheme.requiredDocuments.slice(0, 4).join("; ")}.`,
+        `Based on your profile, ${match.scheme.name} is a potentially relevant option (preliminary ${match.level.toUpperCase()} match). Its commonly requested documents include: ${match.scheme.requiredDocuments.slice(0, 4).join("; ")}.`,
+      )
+    : pick(
+        lang,
+        "विशिष्ट scheme चुनने से documents की list और precise हो जाएगी।",
+        "Vishisht scheme chunne se documents ki list aur precise ho jayegi.",
+        "Picking a specific scheme makes the document checklist more precise.",
+      );
+
+  const text = pick(
+    lang,
+    `आपका estimated project cost ${FULL(projectCost)} है, contribution ${FULL(contribution)} और funding requirement करीब ${FULL(fin.potentialLoan)}।\n\n${schemePart}\n\nApplication draft में ये values पहले से भरी रहती हैं और आप उन्हें edit कर सकते हैं — Dashboard → Financial Overview → "Prepare Loan Application" खोलें। यह एक AI-generated draft है, approval नहीं।`,
+    `Aapka estimated project cost ${FULL(projectCost)} hai, contribution ${FULL(contribution)} aur funding requirement karib ${FULL(fin.potentialLoan)}.\n\n${schemePart}\n\nApplication draft mein yeh values pehle se bhari rehti hain aur aap unhein edit kar sakte hain — Dashboard → Financial Overview → "Prepare Loan Application" kholen. Yeh ek AI-generated draft hai, approval nahi.`,
+    `Your estimated project cost is ${FULL(projectCost)} with a ${FULL(contribution)} contribution and a funding requirement of about ${FULL(fin.potentialLoan)}.\n\n${schemePart}\n\nThese values pre-fill the application draft and are editable — open it from Dashboard → Financial Overview → "Prepare Loan Application". It is an AI-generated draft, not an approval.`,
+  );
+
+  return { text, followups: [] };
+}
+
 function buildSchemeAnswer(
   lang: AdvisorLang,
   f: FeasibilityData,
@@ -662,6 +726,12 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
         suggestPage: "/dashboard",
       };
     }
+  }
+
+  // Loan application / documents workflow
+  if (/(loan application|application draft|application karna|application kar|application mein|application me|application ke liye kya|draft mein|draft me|kya documents|documents chahiye|kaunse documents|document checklist|kya kagaz|bank application)/.test(hint) && context.feasibility) {
+    const r = buildLoanApplicationAnswer(lang, context);
+    return { text: r.text, followups: r.followups };
   }
 
   // Loan / finance
