@@ -33,20 +33,33 @@ export function loadPinIndex(
   if (cacheError) throw cacheError;
 
   cachePromise = (async () => {
-    const res = await fetch(sourceUrl, {
-      cache: "force-cache",
-      signal: timeoutSignal(QUICK_LOAD_TIMEOUT_MS),
-    });
-    if (!res.ok) throw new Error(`Location index download failed (HTTP ${res.status})`);
-    const raw = (await res.json()) as Record<string, unknown>[];
-    onProgress?.(100);
-    const out: GeoPlace[] = [];
-    for (const rec of raw) {
-      const place = normalizeRecord(rec);
-      if (!place) continue;
-      out.push(place);
+    let lastErr: unknown = null;
+    // One automatic retry for transient network hiccups.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(sourceUrl, {
+          cache: "force-cache",
+          signal: timeoutSignal(QUICK_LOAD_TIMEOUT_MS),
+        });
+        if (!res.ok) throw new Error(`Location index download failed (HTTP ${res.status})`);
+        const raw = (await res.json()) as Record<string, unknown>[];
+        onProgress?.(100);
+        const out: GeoPlace[] = [];
+        for (const rec of raw) {
+          const place = normalizeRecord(rec);
+          if (!place) continue;
+          out.push(place);
+        }
+        return out;
+      } catch (err) {
+        lastErr = err;
+        if (attempt === 0) {
+          // Brief pause before the retry.
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
     }
-    return out;
+    throw lastErr ?? new Error("Location index could not be loaded.");
   })().catch((err: unknown) => {
     cacheError = err instanceof Error ? err : new Error(String(err));
     cachePromise = null;
