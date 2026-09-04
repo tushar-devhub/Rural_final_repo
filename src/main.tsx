@@ -8,6 +8,12 @@ import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
+// Leaflet styles belong to the app shell (static <link> in the built
+// index.html), NOT to a lazy route chunk. Imported from a route component
+// they ship as a runtime-injected async stylesheet, which can fail to apply
+// in production deployments and leaves the map panes/tiles unstyled =
+// invisible map even though tiles download fine.
+import "leaflet/dist/leaflet.css";
 import { OnboardingProvider } from "./lib/onboarding-context";
 import { VoiceAssistant } from "./components/VoiceAssistant";
 

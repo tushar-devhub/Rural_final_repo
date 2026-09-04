@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as L from "leaflet";
-import "leaflet/dist/leaflet.css";
+// leaflet.css is imported once in src/main.tsx (app shell) so the map styles
+// are always present; keep no duplicate copy here.
 import type { DistrictFeature } from "@/services/geo/boundaries";
 import type { LngLat } from "@/services/geo/geoUtils";
 
@@ -108,7 +109,35 @@ export default function IndiaMap({
     });
 
     mapRef.current = map;
+
+    // Production hardening: if the container was hidden or mid-layout when the
+    // map was created (lazy chunk loads, fonts/images shifting layout, mobile
+    // rotation), Leaflet keeps the stale/zero size forever unless invalidated.
+    // Dev previews mask this because iframe/window resize events repair the
+    // map; production deployments never fire one.
+    let raf = 0;
+    const invalidate = () => {
+      if (!mapRef.current) return;
+      mapRef.current.invalidateSize();
+    };
+    // First pass after mount (one frame), then again after fonts/layout settle.
+    raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(() => invalidate());
+    });
+    const settleTimer = window.setTimeout(() => invalidate(), 300);
+
+    // Re-invalidate whenever the container itself changes size (e.g. sidebar
+    // toggles, mobile keyboard, responsive class changes).
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => invalidate());
+      observer.observe(el);
+    }
+
     return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(settleTimer);
+      observer?.disconnect();
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
