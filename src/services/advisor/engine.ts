@@ -24,6 +24,7 @@ import { generateFeasibility } from "@/data/feasibility";
 import { formatIndianCurrency } from "@/data/assessment";
 import { detectLanguage, extractBusinesses, extractCapital, extractLocation, type AdvisorLang } from "./parse";
 import { matchSchemesForProfileSource } from "@/engine/schemeMatching";
+import { buildHyperlocalProfile, type HyperlocalMarketProfile } from "@/services/hyperlocal/profile";
 
 // ─── Public types ───
 
@@ -591,6 +592,135 @@ function buildNextStepsAnswer(lang: AdvisorLang, f: FeasibilityData): string {
   );
 }
 
+// ─── Hyperlocal market intelligence answers ───
+// The hyperlocal layer derives demand/gap/competition/risk reads from the
+// SAME feasibility object (never invents numbers). It only explains how the
+// chosen location + radius shape the analysis.
+
+function hyperlocalProfileFor(
+  ctx: AdvisorContext,
+  sc: Scenario,
+): HyperlocalMarketProfile | null {
+  if (!sc.business || !sc.location || !sc.feasibility) return null;
+  try {
+    return buildHyperlocalProfile({
+      location: sc.location,
+      business: sc.business,
+      capital: sc.capital,
+      radiusKm: ctx.radius ?? 5,
+      feasibility: sc.feasibility,
+    });
+  } catch {
+    return null;
+  }
+}
+
+const DEMAND_WORD: Record<string, { hi: string; hg: string; en: string }> = {
+  high: { hi: "उच्च", hg: "high", en: "high" },
+  "moderate-high": { hi: "मध्यम-उच्च", hg: "moderate-high", en: "moderate-to-high" },
+  moderate: { hi: "मध्यम", hg: "moderate", en: "moderate" },
+  limited: { hi: "सीमित", hg: "limited", en: "limited" },
+};
+
+const DENSITY_WORD: Record<string, { hi: string; hg: string; en: string }> = {
+  high: { hi: "ज़्यादा", hg: "high", en: "high" },
+  medium: { hi: "मध्यम", hg: "medium", en: "moderate" },
+  low: { hi: "कम", hg: "low", en: "low" },
+};
+
+function demandWord(lang: AdvisorLang, level: string): string {
+  const w = DEMAND_WORD[level] ?? DEMAND_WORD.moderate;
+  return lang === "hi" ? w.hi : lang === "hinglish" ? w.hg : w.en;
+}
+
+function densityWord(lang: AdvisorLang, density: string): string {
+  const w = DENSITY_WORD[density] ?? DENSITY_WORD.medium;
+  return lang === "hi" ? w.hi : lang === "hinglish" ? w.hg : w.en;
+}
+
+function buildHyperlocalAnswer(lang: AdvisorLang, ctx: AdvisorContext, sc: Scenario): { text: string; followups: string[] } | null {
+  const profile = hyperlocalProfileFor(ctx, sc);
+  const f = sc.feasibility;
+  if (!profile || !f || !sc.location || !sc.business) return null;
+
+  const biz = sc.business;
+  const place = sc.location;
+  const radius = ctx.radius ?? 5;
+  const demand = demandWord(lang, profile.demand.level);
+  const density = densityWord(lang, profile.competition.density);
+  const hh = f.marketReach.households.toLocaleString("en-IN");
+  const verdictLine = pick(
+    lang,
+    `${place.name} में ${biz.name} का current feasibility score ${f.overallScore}/100 है (${verdictEmoji(f.verdict)} ${f.verdictLabel})।`,
+    `${place.name} mein ${biz.name} ka current feasibility score ${f.overallScore}/100 hai (${verdictEmoji(f.verdict)} ${f.verdictLabel}).`,
+    `For ${biz.name} in ${place.name}, the current feasibility score is ${f.overallScore}/100 (${f.verdictLabel}).`,
+  );
+
+  const demandLine = pick(
+    lang,
+    `आपके ${radius} km radius (${profile.meta.radiusBand}) में ≈ ${hh} households का estimated customer base दिखता है — मेरी hyperlocal read में demand signal ${demand} है।`,
+    `Aapke ${radius} km radius (${profile.meta.radiusBand}) mein approx ${hh} households ka estimated customer base dikhta hai — meri hyperlocal read mein demand signal ${demand} hai.`,
+    `Within your ${radius} km radius (${profile.meta.radiusBand}), the analysis estimates ≈ ${hh} reachable households — the hyperlocal demand signal reads as ${demand}.`,
+  );
+
+  const compLine = pick(
+    lang,
+    `${profile.competition.totalVisible} similar businesses ${radius} km में visible हैं — competition density ${density} है।`,
+    `${profile.competition.totalVisible} similar businesses ${radius} km mein visible hain — competition density ${density} hai.`,
+    `${profile.competition.totalVisible} similar businesses are visible within ${radius} km — competition density is ${density}.`,
+  );
+
+  const gapLine =
+    profile.marketGaps.length > 0
+      ? pick(
+          lang,
+          `संभावित gap: ${profile.marketGaps[0].title} — ${profile.marketGaps[0].statement}`,
+          `Sambhavit gap: ${profile.marketGaps[0].title} — ${profile.marketGaps[0].statement}`,
+          `Potential gap: ${profile.marketGaps[0].title} — ${profile.marketGaps[0].statement}`,
+        )
+      : pick(
+          lang,
+          "Available data में कोई strong gap signal नहीं मिला — demand को ground पर validate करना होगा।",
+          "Available data mein koi strong gap signal nahi mila — demand ko ground par validate karna hoga.",
+          "No strong gap signal from available data — demand should be validated on the ground.",
+        );
+
+  const riskLine =
+    profile.risks.length > 0
+      ? pick(
+          lang,
+          `मुख्य local risks: ${profile.risks
+            .slice(0, 2)
+            .map((r) => `${r.severity === "high" ? "🔴" : "🟠"} ${r.name}`)
+            .join(", ")}।`,
+          `Mukhya local risks: ${profile.risks
+            .slice(0, 2)
+            .map((r) => `${r.severity === "high" ? "🔴" : "🟠"} ${r.name}`)
+            .join(", ")}.`,
+          `Key local risks: ${profile.risks
+            .slice(0, 2)
+            .map((r) => `${r.severity === "high" ? "🔴" : "🟠"} ${r.name}`)
+            .join(", ")}.`,
+        )
+      : "";
+
+  const caveat = pick(
+    lang,
+    "\nयह hyperlocal read available location + business signals से derived है — verified local statistics नहीं। Numbers आपके current analysis से हैं।",
+    "\nYeh hyperlocal read available location + business signals se derived hai — verified local statistics nahi. Numbers aapke current analysis se hain.",
+    "\nThis hyperlocal read is derived from available location and business signals — not verified local statistics. All figures come from your current analysis.",
+  );
+
+  const text = [verdictLine, demandLine, compLine, gapLine, riskLine, caveat].filter(Boolean).join("\n\n");
+  return {
+    text,
+    followups: [
+      pick(lang, "मेरा score इस location पर कैसे बना?", "Mera score is location par kaise bana?", "How did my score form for this location?"),
+      pick(lang, "Yahan aur kaunse businesses चल सकते हैं?", "Yahan aur kaunse businesses chal sakte hain?", "Which other businesses could work here?"),
+    ],
+  };
+}
+
 // ─── Reply computation ───
 
 function computeReply(req: AdvisorRequest): AdvisorReply {
@@ -688,6 +818,27 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
       ),
       followups: [],
     };
+  }
+
+  // ── Hyperlocal fit questions: "is dairy good in my area?", "yahan dairy
+  //    chalega?", "mere gaon mein kya rahega?" — answered from the actual
+  //    analysis + location/radius read, never from generic advice. ──
+  const hyperlocalQuestion =
+    context.feasibility !== null &&
+    !/(loan|emi|kist|kisht|scheme|sarkari|yojana|mudra|pmegp|subsidy|score|verdict|swot|price|pricing|dam|rate|kitna|how much|kaunsa|कौन सा|recommend|suggest)/.test(hint) &&
+    /(is area|this area|my area|mere area|meri area|mere ilake|mere shehar|is shehar|is ilake|us ilake|us area|wahan|vahan|yahan|wahin|local|hyperlocal|kaisa rahega|kaisi rahegi|kya chalega|kya sahi|gaon|gav|village|town mein|क्षेत्र|यहां|वहां|इलाका|गांव)/.test(hint) &&
+    /(good|better|best|fit|suit|chalega|rahega|rahegi|accha|acha|sahi|good idea|chal sakta|possible|अच्छा|बेहतर|चलेगा|रहेगा|रहेगी)/.test(hint);
+
+  if (hyperlocalQuestion) {
+    const sc = feasibilityForScenario(context, {
+      business: businesses.length === 1 ? businesses[0] : null,
+      capital,
+      location: mentionedLocation,
+    });
+    const r = buildHyperlocalAnswer(lang, context, sc);
+    if (r) {
+      return { text: r.text, followups: r.followups, suggestPage: "/dashboard" };
+    }
   }
 
   // Topic intents — answer from the actual scenario data

@@ -9,6 +9,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useCountUp } from "@/hooks/useCountUp";
 import SchemesSection from "@/components/SchemesSection";
+import HyperlocalIntelligence from "@/components/HyperlocalIntelligence";
 import { useInView } from "@/hooks/useInView";
 import {
   Users, Lightbulb, ShieldCheck, AlertTriangle, Target,
@@ -104,6 +105,17 @@ export default function Dashboard() {
             <RisksSection f={f} />
             <CompetitionSection f={f} location={location} radius={radius} />
           </div>
+
+          {/* ── Hyperlocal Market Intelligence ── */}
+          {location && business && capital > 0 && (
+            <HyperlocalIntelligence
+              feasibility={f}
+              location={location}
+              business={business}
+              capital={capital}
+              radius={radius}
+            />
+          )}
 
           {/* ── Pricing ── */}
           <PricingSection f={f} />

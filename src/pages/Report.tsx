@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useOnboarding } from "@/lib/onboarding-context";
 import { formatIndianCurrency, getVerdictColor, getVerdictIcon } from "@/data/assessment";
+import { buildHyperlocalProfile } from "@/services/hyperlocal/profile";
 import { SWOTGrid } from "@/components/ui/SWOTGrid";
 import { DataConfidenceBadge } from "@/components/ui/DataConfidenceBadge";
 import { matchSchemesForProfileSource, type SchemeMatch } from "@/engine/schemeMatching";
@@ -47,6 +49,14 @@ export default function Report() {
   }
 
   const f = feasibility;
+  const hyperlocal = useMemo(
+    () =>
+      location && business && capital > 0
+        ? buildHyperlocalProfile({ location, business, capital, radiusKm: radius, feasibility: f })
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [f, location, business, capital, radius],
+  );
   const schemeResult =
     feasibility && business && location
       ? matchSchemesForProfileSource({
@@ -151,6 +161,53 @@ export default function Report() {
             </div>
             <p className="text-xs text-muted-foreground">{f.opportunity.summary}</p>
           </Section>
+
+          {/* Hyperlocal Market Intelligence */}
+          {hyperlocal && (
+            <Section title="Hyperlocal Market Intelligence">
+              <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                Why {business?.name} may or may not fit this specific location — {location?.name}, {location?.district}, {location?.state}
+                {location?.pincode ? ` (PIN ${location.pincode})` : ""} · {hyperlocal.meta.radiusBand} · {hyperlocal.meta.radiusKm} km analysis radius.
+                Every statement is derived from the feasibility analysis on this report and marked with how it was determined.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <ReportStat label="Demand signal" value={hyperlocal.demand.levelLabel} tone={toneFor(hyperlocal.demand.level === "high" || hyperlocal.demand.level === "moderate-high" ? "pos" : hyperlocal.demand.level === "moderate" ? "mid" : "neg")} />
+                <ReportStat label="Location impact" value={hyperlocal.locationImpact.direction} tone={toneFor(hyperlocal.locationImpact.direction === "positive" ? "pos" : hyperlocal.locationImpact.direction === "mixed" ? "mid" : "neg")} />
+                <ReportStat label="Visible competition" value={`${hyperlocal.competition.totalVisible} (${hyperlocal.competition.density})`} tone={toneFor(hyperlocal.competition.density === "low" ? "pos" : hyperlocal.competition.density === "medium" ? "mid" : "neg")} />
+                <ReportStat label="Estimated reach" value={`${f.marketReach.households.toLocaleString("en-IN")} households`} tone="neutral" />
+              </div>
+
+              <p className="text-xs text-muted-foreground leading-relaxed mb-2">{hyperlocal.locationFit.statement}</p>
+
+              <ul className="space-y-1 text-[11px] text-muted-foreground mb-3">
+                <li>• {hyperlocal.locationFit.marketNote}</li>
+                <li>• {hyperlocal.locationFit.competitionNote}</li>
+                <li>• {hyperlocal.locationFit.capitalNote}</li>
+              </ul>
+
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wider mb-1">Potential market gaps</p>
+              {hyperlocal.marketGaps.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground mb-3">No strong gap signal from the available category-presence data — validate directly on the ground.</p>
+              ) : (
+                <ul className="space-y-1 text-[11px] text-muted-foreground mb-3">
+                  {hyperlocal.marketGaps.slice(0, 2).map((g) => (
+                    <li key={g.type + g.title}>• {g.title} — {g.statement}</li>
+                  ))}
+                </ul>
+              )}
+
+              <p className="text-[11px] font-semibold text-foreground uppercase tracking-wider mb-1">Location impact on score</p>
+              <ul className="space-y-0.5 text-[11px] text-muted-foreground mb-3">
+                {hyperlocal.locationImpact.factors.map((x) => (
+                  <li key={x.label}>• ({x.effect}) {x.label}: {x.detail}</li>
+                ))}
+              </ul>
+              <p className="text-[10px] text-muted-foreground/70">
+                Confidence: {hyperlocal.confidence}. Sources: {hyperlocal.sources.join(" · ")}. {hyperlocal.caveats[0]}
+              </p>
+            </Section>
+          )}
 
           {/* SWOT */}
           <Section title="SWOT Analysis">
@@ -373,6 +430,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </div>
   );
+}
+
+function ReportStat({ label, value, tone }: { label: string; value: string; tone: "pos" | "mid" | "neg" | "neutral" }) {
+  const cls =
+    tone === "pos"
+      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+      : tone === "mid"
+        ? "bg-amber-50 border-amber-200 text-amber-700"
+        : tone === "neg"
+          ? "bg-red-50 border-red-200 text-red-700"
+          : "bg-muted/50 text-foreground";
+  return (
+    <div className={cn("rounded-lg border p-2.5 text-center", cls)}>
+      <p className="text-[9px] font-semibold uppercase tracking-wider opacity-80">{label}</p>
+      <p className="text-sm font-bold mt-0.5 capitalize">{value}</p>
+    </div>
+  );
+}
+
+function toneFor(kind: "pos" | "mid" | "neg"): "pos" | "mid" | "neg" | "neutral" {
+  return kind;
 }
 
 function StatBlock({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
