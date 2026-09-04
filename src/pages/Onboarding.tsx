@@ -1,9 +1,10 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { ProgressStepper } from "@/components/ui/ProgressStepper";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useOnboarding } from "@/lib/onboarding-context";
 import { generateFeasibility } from "@/data/feasibility";
+import { calculateProjectCost, calculateLoan, startupCostRange } from "@/engine/financial";
 import type { Location } from "@/data/locations";
 import { businessCategories, type BusinessCategory } from "@/data/businesses";
 import { formatIndianCurrency } from "@/data/assessment";
@@ -52,6 +53,8 @@ function OnboardingInner() {
 
   const [businessSearch, setBusinessSearch] = useState("");
   const [capitalError, setCapitalError] = useState("");
+  const [analyzeError, setAnalyzeError] = useState(false);
+  const analyzeBusyRef = useRef(false);
 
   const filteredBusinesses = useMemo(() => {
     if (!businessSearch) return businessCategories;
@@ -95,14 +98,61 @@ function OnboardingInner() {
   }, [step, transitionTo]);
 
   const handleAnalyze = useCallback(async () => {
-    if (!business || !location) return;
+    if (!business || !location || analyzeBusyRef.current) return;
+    analyzeBusyRef.current = true;
+    setAnalyzeError(false);
     setIsAnalyzing(true);
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    const feasibility = generateFeasibility(business.id, capital, location.id, radius);
-    setFeasibility(feasibility);
-    setIsAnalyzing(false);
-    navigate("/dashboard");
+    try {
+      const startedAt = Date.now();
+      const feasibility = generateFeasibility(business.id, capital, location.id, radius);
+      // The calculation itself is fast — hold the polished branded loader
+      // for a short minimum so there is no abrupt flash into the dashboard.
+      const elapsed = Date.now() - startedAt;
+      const minDisplay = 3200;
+      if (elapsed < minDisplay) {
+        await new Promise((resolve) => setTimeout(resolve, minDisplay - elapsed));
+      }
+      setFeasibility(feasibility);
+      setIsAnalyzing(false);
+      analyzeBusyRef.current = false;
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Analysis failed:", err);
+      setIsAnalyzing(false);
+      analyzeBusyRef.current = false;
+      setAnalyzeError(true);
+    }
   }, [business, location, capital, radius, navigate, setFeasibility, setIsAnalyzing]);
+
+  if (analyzeError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-md text-center animate-scale-in">
+          <div className="rounded-2xl border border-border bg-white p-8 shadow-xl">
+            <div className="h-12 w-12 rounded-full bg-red-100 mx-auto mb-4 flex items-center justify-center">
+              <AlertCircle className="h-6 w-6 text-red-500" />
+            </div>
+            <h2 className="text-lg font-bold text-foreground">Something went wrong while analyzing your business</h2>
+            <p className="text-sm text-muted-foreground mt-2">Your selections are safe — your analysis was not lost.</p>
+            <div className="flex flex-wrap gap-3 justify-center mt-6">
+              <button
+                onClick={() => setAnalyzeError(false)}
+                className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" /> Back to Review
+              </button>
+              <button
+                onClick={handleAnalyze}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-all shadow-sm"
+              >
+                <RotateCcw className="h-4 w-4" /> Try Again
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isAnalyzing) {
     return <AnalysisLoader businessName={business?.name || "Your business"} locationName={location?.name || ""} />;
@@ -153,7 +203,7 @@ function OnboardingInner() {
             />
           )}
           {step === 2 && (
-            <CapitalStep value={capital} onChange={(v) => { setCapital(v); setCapitalError(""); }} error={capitalError} />
+            <CapitalStep value={capital} business={business} onChange={(v) => { setCapital(v); setCapitalError(""); }} error={capitalError} />
           )}
           {step === 3 && (
             <ReviewStep location={location} radius={radius} business={business} capital={capital}
@@ -777,10 +827,30 @@ function BusinessStep({ search, onSearchChange, businesses, selected, onSelect, 
 }
 
 /* ─── Step 3: Capital with dynamic financing preview ─── */
-function CapitalStep({ value, onChange, error }: { value: number; onChange: (v: number) => void; error: string }) {
-  const projectCost = value / 0.1;
-  const loanAmount = Math.min(projectCost * 0.9, projectCost > 140000 ? 4500000 : 125000);
+function CapitalStep({ value, business, onChange, error }: {
+  value: number; business: BusinessCategory | null;
+  onChange: (v: number) => void; error: string;
+}) {
   const showPreview = value > 0;
+
+  // Business-context aware estimate from the shared financial engine — no
+  // universal multiplier. Same model the feasibility dashboard later uses.
+  const estimate = useMemo(() => {
+    if (!showPreview) return null;
+    const bid = business?.id ?? "other";
+    const range = startupCostRange(bid);
+    const pc = calculateProjectCost(value, bid);
+    const projectCost = pc.totalProjectCost;
+    const fundingGap = Math.max(0, projectCost - value);
+    const loan = calculateLoan(value, bid);
+    return {
+      range,
+      projectCost,
+      fundingGap,
+      financing: loan ? loan.loanAmount : 0,
+      noFinancingNeeded: fundingGap <= 0,
+    };
+  }, [value, business, showPreview]);
 
   return (
     <div className="animate-fade-in">
@@ -812,13 +882,48 @@ function CapitalStep({ value, onChange, error }: { value: number; onChange: (v: 
         ))}
       </div>
 
-      {showPreview && (
-        <div className="rounded-xl bg-[#F4F8EF] border border-border/60 p-4 animate-fade-in">
+      {showPreview && estimate && (
+        <div className="rounded-xl bg-[#F4F8EF] border border-border/60 p-4 animate-fade-in space-y-3">
           <p className="text-sm text-muted-foreground">
-            💡 With a <span className="font-semibold text-foreground">{formatIndianCurrency(value)}</span> contribution, your estimated project cost may be around{" "}
-            <span className="font-semibold text-foreground">{formatIndianCurrency(projectCost)}</span>, with potential financing of up to{" "}
-            <span className="font-semibold text-primary">{formatIndianCurrency(loanAmount)}</span>, depending on your business type and applicable schemes.
+            💡 {business ? (
+              <>
+                Based on your <span className="font-semibold text-foreground">{business.icon} {business.name}</span> selection, a typical setup for this business is estimated between{" "}
+                <span className="font-semibold text-foreground">{formatIndianCurrency(estimate.range.min)}</span> and{" "}
+                <span className="font-semibold text-foreground">{formatIndianCurrency(estimate.range.max)}</span>.
+              </>
+            ) : (
+              "Based on a typical small-business setup:"
+            )}
           </p>
+
+          <div className="rounded-lg border border-border/60 bg-white divide-y divide-border/60 overflow-hidden text-sm">
+            <PreviewRow label="Estimated project cost" value={formatIndianCurrency(estimate.projectCost)} note="typical setup estimate" />
+            <PreviewRow label="Your contribution" value={formatIndianCurrency(value)} />
+            {estimate.noFinancingNeeded ? (
+              <PreviewRow label="External financing needed" value="None estimated" note="your contribution covers a typical setup" highlight />
+            ) : (
+              <PreviewRow
+                label="Estimated funding requirement"
+                value={formatIndianCurrency(estimate.fundingGap)}
+                note={`potential financing up to ${formatIndianCurrency(estimate.financing)}, subject to scheme terms`}
+                highlight
+              />
+            )}
+          </div>
+
+          <details className="rounded-lg border border-border/60 bg-white/70 px-3 py-2 text-xs">
+            <summary className="cursor-pointer select-none font-semibold text-primary">
+              How did RuralBiz estimate this?
+            </summary>
+            <ul className="mt-2 space-y-1 text-muted-foreground list-none">
+              <li>• The selected business type and its typical setup requirements</li>
+              <li>• Typical rural micro-enterprise cost ranges (setup + initial working capital)</li>
+              <li>• Your available contribution against that typical setup</li>
+            </ul>
+            <p className="mt-2 text-[11px] text-muted-foreground/80">
+              These are preliminary estimates for decision support. Actual costs and financing depend on local prices, business scale, lender requirements and applicable schemes.
+            </p>
+          </details>
         </div>
       )}
 
@@ -829,6 +934,20 @@ function CapitalStep({ value, onChange, error }: { value: number; onChange: (v: 
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function PreviewRow({ label, value, note, highlight }: {
+  label: string; value: string; note?: string; highlight?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right">
+        <span className={cn("font-bold", highlight ? "text-primary" : "text-foreground")}>{value}</span>
+        {note && <span className="block text-[10px] text-muted-foreground">{note}</span>}
+      </span>
     </div>
   );
 }
@@ -896,15 +1015,18 @@ function AnalysisLoader({ businessName, locationName }: { businessName: string; 
   ];
 
   useEffect(() => {
-    const totalDuration = 2800;
-    const stepDelay = totalDuration / steps.length;
+    // Timeline fits inside handleAnalyze's ~3.2 s minimum display: all six
+    // steps tick by ~2.1 s and the "Analysis Ready" card lands ~2.7 s so the
+    // loader never overruns the navigation.
+    const firstTick = 250;
+    const stepDelay = 380;
     steps.forEach((_, i) => {
       setTimeout(() => {
         setCompletedSteps((prev) => [...prev, i]);
         setProgress(((i + 1) / steps.length) * 100);
-      }, 400 + i * stepDelay);
+      }, firstTick + i * stepDelay);
     });
-    setTimeout(() => setShowComplete(true), 400 + steps.length * stepDelay + 400);
+    setTimeout(() => setShowComplete(true), firstTick + steps.length * stepDelay + 300);
   }, []);
 
   if (showComplete) {

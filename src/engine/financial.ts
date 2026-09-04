@@ -34,14 +34,70 @@ export const LOAN_SCHEMES: LoanScheme[] = [
   },
 ];
 
-/* ─── Project Cost Calculation ─── */
+/* ─── Business startup cost ranges ───
+ * Canonical numeric ranges for a *typical rural micro setup* per business,
+ * aligned with the investment ranges shown in the business catalogue
+ * (₹ min – ₹ max). These are estimates for decision support — never exact
+ * quotes. Used by the project-cost model below.
+ */
 
-export function calculateProjectCost(contribution: number): ProjectCostBreakdown {
-  // Beneficiary contribution is 10% of project cost
-  // Project Cost = Contribution / 0.10
-  const rawProjectCost = contribution / 0.1;
+export interface BusinessStartupRange {
+  min: number;
+  max: number;
+}
 
-  // Find applicable scheme
+export const BUSINESS_STARTUP_RANGES: Record<string, BusinessStartupRange> = {
+  dairy: { min: 100000, max: 500000 },
+  grocery: { min: 50000, max: 300000 },
+  poultry: { min: 150000, max: 800000 },
+  "poultry-feed": { min: 75000, max: 400000 },
+  clothing: { min: 80000, max: 500000 },
+  "mobile-repair": { min: 30000, max: 200000 },
+  "food-processing": { min: 100000, max: 600000 },
+  "agri-inputs": { min: 100000, max: 500000 },
+  retail: { min: 50000, max: 300000 },
+  services: { min: 20000, max: 200000 },
+  manufacturing: { min: 200000, max: 1000000 },
+  other: { min: 50000, max: 500000 },
+};
+
+/** Typical project size band (₹) for a business id, with a safe default. */
+export function startupCostRange(businessId: string): BusinessStartupRange {
+  return BUSINESS_STARTUP_RANGES[businessId] ?? BUSINESS_STARTUP_RANGES.other;
+}
+
+/* ─── Project Cost Calculation ───
+ * Business-context aware. No universal multiplier:
+ *   • Below the typical minimum → the minimum viable setup is estimated, so a
+ *     small contribution produces a small funding need, not a giant project.
+ *   • Within the range → sized to the *typical setup* for this business type
+ *     (the midpoint) when the contribution cannot fund it, otherwise scaled to
+ *     the user's own contribution.
+ *   • Above the typical maximum → capped at the typical full setup; extra
+ *     contribution is treated as a buffer, funding gap = ₹0.
+ */
+
+export function calculateProjectCost(contribution: number, businessId = "other"): ProjectCostBreakdown {
+  const { min, max } = startupCostRange(businessId);
+  const typical = Math.round((min + max) / 2);
+
+  let estimatedProjectCost: number;
+  if (contribution <= 0) {
+    estimatedProjectCost = min; // no own money yet → minimum viable setup
+  } else if (contribution < min) {
+    estimatedProjectCost = min; // minimum viable scale for this business
+  } else if (contribution < typical) {
+    estimatedProjectCost = typical; // needs some financing to reach typical scale
+  } else if (contribution <= max) {
+    estimatedProjectCost = contribution; // own money already covers a typical setup
+  } else {
+    estimatedProjectCost = max; // above typical scope — capped at full typical setup
+  }
+
+  const rawProjectCost = estimatedProjectCost;
+  const fundingGap = Math.max(0, estimatedProjectCost - contribution);
+
+  // Find applicable scheme for the estimated project cost
   const scheme = determineScheme(rawProjectCost);
 
   if (!scheme) {
@@ -51,7 +107,7 @@ export function calculateProjectCost(contribution: number): ProjectCostBreakdown
       rawProjectCost,
       schemeMaxFunding: 0,
       agencyFunding: 0,
-      totalProjectCost: contribution,
+      totalProjectCost: contribution > rawProjectCost ? rawProjectCost : contribution,
       isLimitExceeded: true,
     };
   }
@@ -77,16 +133,15 @@ export function calculateProjectCost(contribution: number): ProjectCostBreakdown
     };
   }
 
-  // Normal case — within scheme limits
-  const agencyFunding = Math.min(rawProjectCost * 0.9, scheme.maxFunding);
-  const totalProjectCost = agencyFunding + contribution;
+  // Normal case — financing is the ACTUAL gap, never manufactured.
+  const agencyFunding = Math.min(fundingGap, scheme.maxFunding);
 
   return {
     entrepreneurContribution: contribution,
     rawProjectCost,
     schemeMaxFunding: scheme.maxFunding,
     agencyFunding,
-    totalProjectCost,
+    totalProjectCost: estimatedProjectCost,
     isLimitExceeded: false,
   };
 }
@@ -103,8 +158,8 @@ export function determineScheme(projectCost: number): LoanScheme | null {
   return null;
 }
 
-export function getSchemeAssignment(contribution: number): SchemeAssignment | null {
-  const projectCost = calculateProjectCost(contribution);
+export function getSchemeAssignment(contribution: number, businessId = "other"): SchemeAssignment | null {
+  const projectCost = calculateProjectCost(contribution, businessId);
   const scheme = determineScheme(projectCost.rawProjectCost);
 
   if (!scheme) return null;
@@ -114,14 +169,17 @@ export function getSchemeAssignment(contribution: number): SchemeAssignment | nu
 
 /* ─── Loan Calculation ─── */
 
-export function calculateLoan(contribution: number): {
+export function calculateLoan(
+  contribution: number,
+  businessId = "other",
+): {
   loanAmount: number;
   interestRate: number;
   tenureYears: number;
   moratoriumMonths: number;
   scheme: LoanScheme;
 } | null {
-  const assignment = getSchemeAssignment(contribution);
+  const assignment = getSchemeAssignment(contribution, businessId);
   if (!assignment) return null;
 
   const { scheme, projectCost } = assignment;
@@ -251,8 +309,8 @@ export function calculateAffordability(
 
   const monthlyCashFlow = expectedMonthlyRevenue - operatingCosts;
 
-  // Calculate monthly repayment from loan
-  const loanInfo = calculateLoan(contribution);
+  // Calculate monthly repayment from loan (business-aware — loan is the real gap)
+  const loanInfo = calculateLoan(contribution, businessId);
   let monthlyRepayment = 0;
 
   if (loanInfo) {
@@ -281,7 +339,13 @@ export function calculateAffordability(
 
   const ratio = monthlyRepayment > 0 ? surplusOrDeficit / monthlyRepayment : 1;
 
-  if (ratio >= 1.5) {
+  if (monthlyRepayment <= 0) {
+    // No financing needed — there is no repayment burden to assess, so the
+    // monthly cash flow is simply surplus.
+    rating = "comfortable";
+    ratingLabel = "Comfortable";
+    ratingIcon = "🟢";
+  } else if (ratio >= 1.5) {
     rating = "comfortable";
     ratingLabel = "Comfortable";
     ratingIcon = "🟢";

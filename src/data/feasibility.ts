@@ -28,9 +28,13 @@ export function generateFeasibility(
   const competition = mapCompetitors(businessId, locationId, radiusKm);
   const pricing = analyzePricing(businessId, locationId);
 
-  // ─── Financial Engine ───
-  const projectCost = calculateProjectCost(capital);
-  const loanInfo = calculateLoan(capital);
+  // ─── Financial Engine (business-context aware — no universal multiplier) ───
+  const projectCost = calculateProjectCost(capital, businessId);
+  const rawLoan = calculateLoan(capital, businessId);
+  // Financing is only presented when there is a real gap between the estimated
+  // project cost and the user's own contribution.
+  const fundingGap = Math.max(0, projectCost.totalProjectCost - capital);
+  const loanInfo = rawLoan && rawLoan.loanAmount > 0 && fundingGap > 0 ? rawLoan : null;
   const affordability = calculateAffordability(capital, businessId, locationId);
 
   // ─── Sub-Scores ───
@@ -103,13 +107,17 @@ export function generateFeasibility(
     watchOuts.push("High competition density — differentiation will be critical");
   }
 
-  if (!projectCost.isLimitExceeded) {
-    whyPoints.push("Financial structure is within government scheme limits");
+  if (fundingGap <= 0) {
+    whyPoints.push("Your contribution covers the estimated project cost — no external financing needed");
+  } else if (!projectCost.isLimitExceeded) {
+    whyPoints.push("The funding gap fits within an applicable financing framework");
   } else {
     watchOuts.push("Your project cost exceeds the scheme maximum — you will need a compliant structure");
   }
 
-  if (affordability.rating === "comfortable") {
+  if (fundingGap <= 0) {
+    whyPoints.push("No loan repayment burden — cash flow stays with the business");
+  } else if (affordability.rating === "comfortable") {
     whyPoints.push("Revenue projections suggest comfortable loan repayment");
   } else if (affordability.rating === "tight") {
     watchOuts.push("Loan repayment will be tight relative to expected revenue");
@@ -179,7 +187,11 @@ export function generateFeasibility(
       availableContribution: capital,
       totalProjectCost: projectCost.totalProjectCost,
       potentialLoan: projectCost.agencyFunding,
-      recommendedScheme: loanInfo ? loanInfo.scheme.name : "No applicable scheme",
+      recommendedScheme: fundingGap <= 0
+        ? "Not required — contribution covers the estimated project cost"
+        : loanInfo
+          ? loanInfo.scheme.name
+          : "No applicable scheme",
       repayment: repaymentDisplay,
       monthlyEstimate: `Expected monthly revenue: ₹${affordability.expectedMonthlyRevenue.toLocaleString("en-IN")} – ₹${Math.round(affordability.expectedMonthlyRevenue * 1.4).toLocaleString("en-IN")}`,
       projectCostBreakdown: projectCost,
@@ -208,7 +220,9 @@ export function generateFeasibility(
       recommendation: verdict,
       whyPoints,
       watchOuts,
-      financialFit: `With ₹${(capital / 1000).toFixed(0)}K contribution, your projected loan of ₹${((projectCost.agencyFunding) / 1000).toFixed(0)}K through ${loanInfo?.scheme.name || "N/A"} results in ${affordability.ratingLabel.toLowerCase()} repayment affordability.`,
+      financialFit: fundingGap <= 0
+        ? `With ₹${(capital / 1000).toFixed(0)}K contribution you can cover the estimated project cost of ₹${(projectCost.totalProjectCost / 1000).toFixed(0)}K — no external financing required.`
+        : `With ₹${(capital / 1000).toFixed(0)}K contribution against an estimated project cost of ₹${(projectCost.totalProjectCost / 1000).toFixed(0)}K, the funding gap is ₹${(fundingGap / 1000).toFixed(0)}K${loanInfo ? ` through ${loanInfo.scheme.name}` : ""} — ${affordability.ratingLabel.toLowerCase()} repayment affordability.`,
       summary: verdict === "good"
         ? "Your business shows good potential in the selected location. The market has room for your products and the financial structure appears viable."
         : verdict === "caution"

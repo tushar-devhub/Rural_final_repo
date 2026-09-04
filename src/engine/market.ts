@@ -478,31 +478,23 @@ export function calculateSubScores(
   const medRisks = risks.filter((r) => r.severity === "medium").length;
   const riskScore = Math.max(20, 85 - highRisks * 15 - medRisks * 5);
 
-  // Financial fit score
-  const projectCost = calculateProjectCost(contribution);
-  const loan = calculateLoan(contribution);
-  let financialFitScore = 60;
+  // Financial fit score — business-aware project cost; higher own-capital share
+  // of the realistic project cost = stronger fit. No scheme-limit penalty for
+  // scale the business never needs.
+  const projectCost = calculateProjectCost(contribution, businessId);
+  const loan = calculateLoan(contribution, businessId);
+  let financialFitScore = 55;
 
-  if (loan) {
-    const schedule = calculateRepayment(
-      loan.loanAmount,
-      loan.interestRate,
-      loan.tenureYears,
-      loan.moratoriumMonths,
-      "quarterly",
-    );
-    const avgPayment =
-      schedule.entries.filter((e) => e.payment > 0).reduce((s, e) => s + e.payment, 0) /
-      Math.max(1, schedule.entries.filter((e) => e.payment > 0).length);
-
-    // Simple heuristic: higher contribution relative to project cost = better fit
-    const contributionRatio = contribution / projectCost.totalProjectCost;
-    if (contributionRatio >= 0.15) financialFitScore = 85;
-    else if (contributionRatio >= 0.1) financialFitScore = 70;
-    else financialFitScore = 50;
-
-    // Adjust for affordability
+  if (loan && loan.loanAmount > 0) {
+    const contributionRatio = contribution / Math.max(1, projectCost.totalProjectCost);
+    if (contributionRatio >= 0.7) financialFitScore = 88;
+    else if (contributionRatio >= 0.45) financialFitScore = 80;
+    else if (contributionRatio >= 0.25) financialFitScore = 70;
+    else financialFitScore = 58;
     if (projectCost.isLimitExceeded) financialFitScore = Math.max(30, financialFitScore - 20);
+  } else {
+    // No financing needed — contribution already covers the typical setup.
+    financialFitScore = 92;
   }
 
   return {
