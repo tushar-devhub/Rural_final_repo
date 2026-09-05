@@ -27,10 +27,74 @@ const RISK_STYLE: Record<string, { label: string; cls: string; dot: string }> = 
 export default function GramUdaanInsights({ f }: { f: FeasibilityData }) {
   return (
     <div className="space-y-5">
+      {f.profitModel?.revenueFormula && <RevenueFormulaSection f={f} />}
       <CostBreakdownSection f={f} />
       {f.profitModel && <CapitalScaleSection f={f} />}
       {f.profitModel && <ProfitTimelineSection f={f} />}
       {f.alternatives && f.alternatives.length > 0 && <AlternativesSection f={f} />}
+    </div>
+  );
+}
+
+/* ═══ REVENUE FORMULA — HOW THE BUSINESS MAKES MONEY ═══ */
+
+function RevenueFormulaSection({ f }: { f: FeasibilityData }) {
+  const pm = f.profitModel!;
+  const formula = pm.revenueFormula!;
+  // Extract numeric parts from monthlyRevenue to show the calculation chain
+  // e.g. 30 customers × ₹200 avg × 26 days ≈ ₹1,56,000
+  // We approximate from monthlyRevenue / variableCostRatio (revenue is the midpoint)
+  const monthlyRev = pm.monthlyRevenue;
+
+  return (
+    <div className="rounded-2xl border border-border bg-white p-5 sm:p-6 transition-all hover:shadow-sm">
+      <div className="flex items-center gap-3 mb-1">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <IndianRupee className="h-5 w-5" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-bold text-foreground">How This Business Makes Money</h3>
+          <p className="text-[11px] text-muted-foreground">Revenue = {formula.label}</p>
+        </div>
+        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-600">estimated</span>
+      </div>
+
+      <div className="rounded-xl bg-[#F4F8EF] border border-border/60 p-4 mb-4">
+        <p className="text-sm font-bold text-foreground mb-2">Estimated Monthly Revenue: {formatIndianCurrency(monthlyRev)}</p>
+        <p className="text-xs text-muted-foreground leading-relaxed mb-2">
+          {formula.hint}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {formula.parts.map((p) => (
+            <span key={p.name} className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-white px-3 py-1 text-xs font-medium text-primary">
+              {p.name}
+            </span>
+          ))}
+          <span className="inline-flex items-center text-xs text-muted-foreground">→</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-3 py-1 text-xs font-bold">
+            {formatIndianCurrency(monthlyRev)} / month
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div className="rounded-lg bg-muted/40 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Revenue</p>
+          <p className="text-sm font-bold text-foreground mt-0.5">{formatIndianCurrency(pm.monthlyRevenue)}</p>
+        </div>
+        <div className="rounded-lg bg-muted/40 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Expenses</p>
+          <p className="text-sm font-bold text-foreground mt-0.5">{formatIndianCurrency(pm.monthlyExpenses)}</p>
+        </div>
+        <div className={cn("rounded-lg p-3 text-center", pm.monthlyProfit >= 0 ? "bg-emerald-50" : "bg-red-50")}>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Profit</p>
+          <p className={cn("text-sm font-bold mt-0.5", pm.monthlyProfit >= 0 ? "text-emerald-700" : "text-red-700")}>{formatIndianCurrency(pm.monthlyProfit)}</p>
+        </div>
+      </div>
+      <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground/80 mb-1">
+        <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+        <span>Revenue, expenses and profit are estimates based on typical performance for this business type at the recommended scale. Actual results depend on local demand, pricing and management.</span>
+      </div>
     </div>
   );
 }

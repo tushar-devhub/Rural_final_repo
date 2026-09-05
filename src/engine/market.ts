@@ -322,42 +322,59 @@ export function identifyRisks(
 
 /* ─── Competitor Mapping ─── */
 
+/** Direct competition tags are searched first; related tags show only as fallback. */
+const COMPETITION_DB: { name: string; type: string; tags: string[]; distance: number }[] = [
+  { name: "Sharma General Store", type: "Grocery", tags: ["grocery", "kirana", "general store"], distance: 0.5 },
+  { name: "Gupta Kirana Store", type: "Grocery", tags: ["grocery", "kirana"], distance: 0.7 },
+  { name: "New Bharat Store", type: "General Store", tags: ["general store", "grocery"], distance: 0.4 },
+  { name: "Raj Dairy Farm", type: "Dairy", tags: ["dairy", "milk", "dairy farm"], distance: 1.2 },
+  { name: "Devi Dairy & Milk Shop", type: "Dairy", tags: ["dairy", "milk"], distance: 1.8 },
+  { name: "Patel Agro Traders", type: "Agricultural Input", tags: ["pesticide", "agricultural input", "seed store", "fertilizer"], distance: 0.8 },
+  { name: "Verma Pesticide Center", type: "Pesticide", tags: ["pesticide", "agricultural input", "farm chemical"], distance: 1.5 },
+  { name: "Shri Krishna Seeds & Fertilizer", type: "Seed & Fertilizer", tags: ["seed store", "fertilizer", "agricultural input"], distance: 2.2 },
+  { name: "Verma Poultry Farm", type: "Poultry", tags: ["poultry", "chicken", "broiler", "poultry farm"], distance: 2.0 },
+  { name: "Ravi Poultry Feed & Farm", type: "Poultry Feed", tags: ["poultry feed", "poultry"], distance: 3.2 },
+  { name: "Kumar Mobile Repair", type: "Mobile Repair", tags: ["mobile repair", "phone repair", "repair shop"], distance: 0.3 },
+  { name: "Ali Mobile Service Center", type: "Mobile Repair", tags: ["mobile repair", "phone repair"], distance: 1.0 },
+  { name: "Singh Cloth House", type: "Clothing", tags: ["clothing", "garments", "fabric"], distance: 1.5 },
+  { name: "Sunita Tailoring & Cloth", type: "Clothing", tags: ["clothing", "tailoring"], distance: 1.1 },
+  { name: "Rathi Electronics", type: "Electronics", tags: ["electronics", "appliance"], distance: 0.9 },
+  { name: "Sharma Hardware Store", type: "Hardware", tags: ["hardware", "tools"], distance: 1.3 },
+  { name: "Metro Salon", type: "Salon", tags: ["salon", "beauty"], distance: 0.6 },
+  { name: "Rani Beauty Parlour", type: "Salon", tags: ["salon", "beauty parlour"], distance: 1.8 },
+  { name: "Baba Digital Seva", type: "Digital Service", tags: ["digital center", "digital service"], distance: 0.4 },
+  { name: "New India Restaurant", type: "Restaurant", tags: ["restaurant", "food", "tea"], distance: 0.5 },
+  { name: "Chai Point", type: "Tea Stall", tags: ["tea", "snacks"], distance: 0.7 },
+];
+
+/** Filter and prioritise competitors by business competition tags. */
 export function mapCompetitors(
   businessId: string,
   locationId: string,
   radiusKm: number,
+  businessCompetitionTags: string[] = [],
 ): CompetitorData {
-  // Mock competitor data — API-ready interface
-  const allCompetitors: { name: string; type: string; distance: string }[] = [
-    { name: "Sharma General Store", type: "Grocery", distance: "0.5 km" },
-    { name: "Raj Dairy Farm", type: "Dairy", distance: "1.2 km" },
-    { name: "Patel Traders", type: "Agriculture Inputs", distance: "0.8 km" },
-    { name: "Kumar Mobile Shop", type: "Mobile Repair", distance: "0.3 km" },
-    { name: "Singh Cloth House", type: "Clothing", distance: "1.5 km" },
-    { name: "Verma Poultry Farm", type: "Poultry", distance: "2.0 km" },
-    { name: "Gupta Kirana", type: "Grocery", distance: "0.7 km" },
-    { name: "Ali Mobile Center", type: "Mobile Repair", distance: "1.0 km" },
-    { name: "Devi Dairy", type: "Dairy", distance: "1.8 km" },
-    { name: "New旦旦 Store", type: "Grocery", distance: "0.4 km" },
-    { name: "Ravi Traders", type: "Poultry Feed", distance: "3.2 km" },
-    { name: "Sunita Clothing", type: "Clothing", distance: "1.1 km" },
-  ];
-
-  // Filter by radius
+  const tagsLower = businessCompetitionTags.map((t) => t.toLowerCase());
   const maxDist = radiusKm;
-  const filtered = allCompetitors.filter((c) => {
-    const dist = parseFloat(c.distance);
-    return dist <= maxDist;
-  });
 
+  // Separate direct competitors (any tag match) from unrelated
+  const direct = COMPETITION_DB.filter((c) => c.distance <= maxDist && tagsLower.some((t) => c.tags.some((ct) => ct.includes(t) || t.includes(ct))));
+  // Related fallback: same broad category (first tag word)
+  const broadPrimary = tagsLower[0]?.split(/\s+/)[0] ?? "";
+  const related = COMPETITION_DB.filter((c) => c.distance <= maxDist && !direct.includes(c) && broadPrimary.length > 2 && c.tags.some((ct) => ct.includes(broadPrimary)));
+
+  const filtered = [...direct, ...related].slice(0, 15);
+
+  const directCount = filtered.filter((c) => tagsLower.some((t) => c.tags.some((ct) => ct.includes(t) || t.includes(ct)))).length;
+  const relatedCount = filtered.length - directCount;
   const totalBusinesses = filtered.length;
   let density: "high" | "medium" | "low";
   let densityLabel: string;
 
-  if (totalBusinesses >= 15) {
+  if (directCount >= 8) {
     density = "high";
     densityLabel = "High";
-  } else if (totalBusinesses >= 8) {
+  } else if (directCount >= 4) {
     density = "medium";
     densityLabel = "Medium";
   } else {
@@ -365,13 +382,16 @@ export function mapCompetitors(
     densityLabel = "Low";
   }
 
-  const summary = `${totalBusinesses} competing businesses found within your ${radiusKm} km analysis radius. Competition density is ${densityLabel.toLowerCase()}.`;
+  const filteredCompetitors = filtered.map((c) => ({ name: c.name, type: c.type, distance: `${c.distance} km` }));
+  const summary = directCount > 0
+    ? `${directCount} direct competitor${directCount === 1 ? "" : "s"} found within ${radiusKm} km${relatedCount > 0 ? ` (+${relatedCount} related businesses)` : ""}. Competition density: ${densityLabel.toLowerCase()}.`
+    : `No direct competitors found within ${radiusKm} km — this may indicate an underserved market or limited local demand.`;
 
   return {
     totalBusinesses,
     density,
     densityLabel,
-    competitors: filtered,
+    competitors: filteredCompetitors,
     summary,
   };
 }

@@ -105,6 +105,30 @@ function FundingLoanBlock({ f }: { f: FeasibilityData }) {
         </p>
       </div>
 
+      {/* Capital surplus explanation when funded */}
+      {gap <= 0 && totalFunding > projectCost && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 mb-4">
+          <p className="text-sm font-bold text-emerald-700 mb-2 flex items-center gap-1.5">
+            <PiggyBank className="h-4 w-4" /> Capital Surplus: {formatIndianCurrency(totalFunding - projectCost)}
+          </p>
+          <p className="text-xs text-emerald-800/80 mb-2">Your available funding ({formatIndianCurrency(totalFunding)}) exceeds the estimated project cost ({formatIndianCurrency(projectCost)}). You do not need external financing.</p>
+          <p className="text-xs font-semibold text-emerald-700 mb-1.5">Possible uses of your surplus:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              "Extra inventory / wider product range",
+              "Working capital buffer (3–6 months)",
+              "Better / higher-capacity equipment",
+              "Marketing & local promotions",
+              "Emergency reserve",
+            ].map((s) => (
+              <span key={s} className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                <CheckCircle2 className="h-3 w-3" /> {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Estimated loan + recommended range */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <div className="rounded-xl border border-border/60 bg-[#F4F8EF] p-4">

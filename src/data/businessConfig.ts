@@ -67,6 +67,10 @@ export interface BusinessSubCategory {
   /** Months to reach steady-state revenue (ramp-up period). */
   rampMonths: number;
   questions: BusinessQuestion[];
+  /** Tags used to filter competition — only these types appear as direct competitors. */
+  competitionTags: string[];
+  /** Human-readable revenue formula explanation for the UI. */
+  revenueFormula: { label: string; parts: { name: string; labelHi: string }[]; hint: string };
 }
 
 /* ─── helpers ─── */
@@ -76,6 +80,12 @@ const W = (
   inventory: number, workingCapital: number,
   licensing = 0.02, other = 0.03,
 ): CostWeights => ({ land, construction, equipment, inventory, workingCapital, licensing, other });
+
+const RF = (label: string, parts: string[], hint: string) => ({
+  label,
+  parts: parts.map((p) => ({ name: p, labelHi: p })),
+  hint,
+});
 
 function def(
   id: string,
@@ -93,8 +103,13 @@ function def(
   variableCostRatio: number,
   rampMonths: number,
   questions: BusinessQuestion[] = [],
+  competitionTags: string[] = [],
+  revenueFormula?: BusinessSubCategory["revenueFormula"],
 ): BusinessSubCategory {
-  return { id, categoryId, businessId, name, nameHi, icon, description, descriptionHi, placeType, costWeights, monthlyRevenue, monthlyFixedCosts, variableCostRatio, rampMonths, questions };
+  return { id, categoryId, businessId, name, nameHi, icon, description, descriptionHi, placeType, costWeights, monthlyRevenue, monthlyFixedCosts, variableCostRatio, rampMonths, questions,
+    competitionTags: competitionTags.length > 0 ? competitionTags : [name],
+    revenueFormula: revenueFormula ?? RF("Customers × Avg Bill × Days", ["Customers", "Avg Bill", "Days"], "Revenue = Expected Customers × Average Bill × Operating Days per month"),
+  };
 }
 
 /* ─── Scale multipliers (revenue/investment at each scale) ─── */
@@ -120,7 +135,12 @@ export const BUSINESS_SUB_CATEGORIES: BusinessSubCategory[] = [
     [
       { id: "animals", label: "How many animals do you plan to start with?", labelHi: "कितने जानवरों से शुरू करेंगे?", options: [{ value: "2", label: "2" }, { value: "5", label: "5" }, { value: "10", label: "10+" }] },
       { id: "shed", label: "Do you have a shed for the animals?", labelHi: "क्या जानवरों के लिए शेड है?", options: [{ value: "yes", label: "Yes", labelHi: "हाँ" }, { value: "no", label: "No, I will arrange", labelHi: "नहीं, इंतज़ाम करूँगा" }] },
-    ]),
+      { id: "dailyMilk", label: "Expected milk production per animal (litres/day)?", labelHi: "प्रति जानवर दैनिक दूध उत्पादन (लीटर)?", options: [{ value: "4", label: "4–5 litres" }, { value: "8", label: "8–10 litres" }, { value: "12", label: "12+ litres" }] },
+      { id: "sellPrice", label: "Expected milk selling price per litre?", labelHi: "प्रति लीटर दूध बिक्री मूल्य?", options: [{ value: "40", label: "₹40" }, { value: "48", label: "₹48" }, { value: "55", label: "₹55+" }] },
+    ],
+    ["dairy", "milk", "dairy farm"],
+    RF("Animals × Production × Price × Days", ["Animals", "Milk/animal (L)", "Price/L", "Days"], "Revenue = Animals × Expected milk/animal/day × Selling price/L × Operating days"),
+  ),
   def("dairy-products", "agriculture", "dairy", "Dairy Products (Paneer / Curd / Ghee)", "डेयरी उत्पाद", "🧀",
     "Value-added milk products for local shops and households", "पनीर, दही, घी जैसे उत्पाद बनाकर बेचना",
     "workspace", W(0.08, 0.18, 0.28, 0.15, 0.26), [25000, 45000], 7000, 0.62, 3,
@@ -136,8 +156,13 @@ export const BUSINESS_SUB_CATEGORIES: BusinessSubCategory[] = [
     "Raising broiler chickens for meat sale to local markets", "मांस के लिए ब्रॉयलर मुर्गी पालन",
     "land", W(0.18, 0.3, 0.15, 0.1, 0.22), [40000, 70000], 9000, 0.7, 3,
     [
-      { id: "birds", label: "How many birds do you plan to raise per batch?", labelHi: "प्रति बैच कितनी मुर्गियाँ?", options: [{ value: "200", label: "200" }, { value: "500", label: "500" }, { value: "1000", label: "1000+" }] },
-    ]),
+      { id: "birds", label: "How many birds per batch?", labelHi: "प्रति बैच कितनी मुर्गियाँ?", options: [{ value: "200", label: "200" }, { value: "500", label: "500" }, { value: "1000", label: "1000+" }] },
+      { id: "batchPerYear", label: "How many batches per year?", labelHi: "साल में कितने बैच?", options: [{ value: "4", label: "4" }, { value: "5", label: "5" }, { value: "6", label: "6+" }] },
+      { id: "sellingPrice", label: "Expected selling price per bird?", labelHi: "प्रति पक्षी अपेक्षित बिक्री मूल्य?", options: [{ value: "120", label: "₹120" }, { value: "160", label: "₹160" }, { value: "200", label: "₹200+" }] },
+    ],
+    ["poultry", "chicken", "broiler", "poultry farm"],
+    RF("Birds × Selling Price × Batches × Days", ["Birds", "Price/bird", "Batches/yr"], "Revenue = Birds/batch × Selling price × Batches/year ÷ 12 (monthly)"),
+  ),
   def("layer", "agriculture", "poultry", "Layer (Egg) Farming", "लेयर अंडा उत्पादन", "🥚",
     "Laying hens for regular egg production and sale", "अंडे के लिए लेयर मुर्गी पालन",
     "land", W(0.18, 0.3, 0.15, 0.1, 0.22), [35000, 65000], 9000, 0.68, 4,
@@ -159,7 +184,12 @@ export const BUSINESS_SUB_CATEGORIES: BusinessSubCategory[] = [
     "shop", W(0.14, 0.1, 0.1, 0.34, 0.27), [45000, 75000], 5000, 0.76, 2,
     [
       { id: "shopSize", label: "Approximate shop size?", labelHi: "दुकान का आकार?", options: [{ value: "small", label: "Small (~100 sq ft)", labelHi: "छोटी" }, { value: "medium", label: "Medium (~200 sq ft)", labelHi: "मध्यम" }, { value: "large", label: "Large (300+ sq ft)", labelHi: "बड़ी" }] },
-    ]),
+      { id: "dailyCustomers", label: "How many customers do you expect per day?", labelHi: "प्रतिदिन कितने ग्राहक होंगे?", options: [{ value: "15", label: "15–20" }, { value: "30", label: "30–40" }, { value: "50", label: "50+" }] },
+      { id: "avgBill", label: "Average customer bill?", labelHi: "औसत ग्राहक बिल?", options: [{ value: "100", label: "₹100" }, { value: "200", label: "₹200" }, { value: "350", label: "₹350+" }] },
+    ],
+    ["grocery", "kirana", "general store"],
+    RF("Customers × Avg Bill × Days", ["Customers/day", "Avg Bill", "Days"], "Revenue = Expected Customers/day × Average Bill Value × Operating Days per month"),
+  ),
   def("mini-supermarket", "retail", "grocery", "Mini Supermarket", "मिनी सुपरमार्केट", "🛒",
     "Wider range of groceries, packaged goods and household items", "व्यापक किराना और पैकेज्ड सामान",
     "shop", W(0.16, 0.12, 0.14, 0.3, 0.23), [55000, 95000], 9000, 0.76, 3, []),
@@ -184,7 +214,11 @@ export const BUSINESS_SUB_CATEGORIES: BusinessSubCategory[] = [
     "shop", W(0.1, 0.1, 0.32, 0.18, 0.25), [20000, 40000], 5000, 0.3, 2,
     [
       { id: "repairs", label: "How many repairs do you expect per day?", labelHi: "प्रतिदिन कितनी मरम्मत?", options: [{ value: "2", label: "2–3" }, { value: "5", label: "5–6" }, { value: "10", label: "10+" }] },
-    ]),
+      { id: "avgRepairValue", label: "Average repair job value?", labelHi: "�सत मरम्मत शुल्क?", options: [{ value: "300", label: "₹300" }, { value: "600", label: "₹600" }, { value: "1000", label: "₹1000+" }] },
+    ],
+    ["mobile repair", "phone repair", "repair shop"],
+    RF("Repairs × Avg Value × Days", ["Repairs/day", "Avg Repair Value", "Days"], "Revenue = Expected Repairs/day × Average Repair Value × Operating Days"),
+  ),
   def("accessories", "services", "mobile-repair", "Accessories + Recharge", "एक्सेसरीज़ और रिचार्ज", "🔌",
     "Chargers, covers, screen guards, recharges and small repairs", "मोबाइल एक्सेसरीज़ और रिचार्ज",
     "shop", W(0.1, 0.08, 0.1, 0.4, 0.27), [25000, 45000], 5000, 0.55, 2, []),
@@ -212,7 +246,15 @@ export const BUSINESS_SUB_CATEGORIES: BusinessSubCategory[] = [
     "shop", W(0.1, 0.08, 0.08, 0.42, 0.27), [40000, 80000], 8000, 0.75, 2, []),
   def("pesticide-store", "retail", "agri-inputs", "Pesticide Store", "कीटनाशक दुकान", "🧪",
     "Pesticides and plant-protection products (licensed)", "कीटनाशक और फसल सुरक्षा उत्पाद",
-    "shop", W(0.1, 0.08, 0.08, 0.42, 0.27), [30000, 55000], 7000, 0.7, 2, []),
+    "shop", W(0.1, 0.08, 0.08, 0.42, 0.27), [30000, 55000], 7000, 0.7, 2,
+    [
+      { id: "dailyCustomers", label: "Expected customers/day (farmers)?", labelHi: "प्रतिदिन अपेक्षित ग्राहक?", options: [{ value: "10", label: "10–15" }, { value: "25", label: "20–30" }, { value: "40", label: "35+" }] },
+      { id: "avgBill", label: "Average customer purchase value?", labelHi: "�सत ग्राहक खरीद मूल्य?", options: [{ value: "200", label: "₹200" }, { value: "500", label: "₹500" }, { value: "1000", label: "₹1000+" }] },
+      { id: "seasonalDemand", label: "How seasonal is demand in your area?", labelHi: "क्षेत्र में माँग कितनी मौसमी है?", options: [{ value: "low", label: "Year-round" }, { value: "medium", label: "Mostly crop season" }, { value: "high", label: "Very seasonal" }] },
+    ],
+    ["pesticide", "agricultural input", "farm chemical", "seed store", "fertilizer"],
+    RF("Customers × Avg Bill × Days", ["Customers/day", "Avg Bill", "Days"], "Revenue = Expected Customers/day × Average Purchase × Operating Days"),
+  ),
   def("farm-equipment", "retail", "agri-inputs", "Farm Equipment & Tools", "कृषि उपकरण", "🚜",
     "Small farm tools, pumps, sprayers and equipment", "कृषि उपकरण और औज़ार",
     "shop", W(0.1, 0.08, 0.18, 0.34, 0.25), [35000, 60000], 8000, 0.72, 2, []),

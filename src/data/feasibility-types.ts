@@ -184,6 +184,11 @@ export interface FeasibilityData {
       reasons: { positive: string[]; concerns: string[] };
     };
     assumptions: string[];
+    revenueFormula?: {
+      label: string;
+      parts: { name: string; labelHi: string }[];
+      hint: string;
+    };
   };
   alternatives?: {
     businessId: string;

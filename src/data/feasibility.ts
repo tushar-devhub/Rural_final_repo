@@ -1,5 +1,6 @@
 import { analyzeMarketReach, analyzeOpportunity, generateSWOT, identifyRisks, mapCompetitors, analyzePricing, calculateSubScores } from "@/engine/market";
 import { calculateProjectCost, calculateRepayment, calculateAffordability } from "@/engine/financial";
+import { getSubCategory } from "@/data/businessConfig";
 import type { CostContext } from "@/engine/costModel";
 import { buildCostBreakdown } from "@/engine/costModel";
 import { buildBusinessModel } from "@/engine/businessModel";
@@ -38,7 +39,9 @@ export function generateFeasibility(
   const opportunity = analyzeOpportunity(businessId, locationId);
   const swot = generateSWOT(businessId, locationId, capital);
   const risks = identifyRisks(businessId, locationId, capital);
-  const competition = mapCompetitors(businessId, locationId, radiusKm);
+  const subCat = getSubCategory(options?.subCategoryId ?? null);
+  const compTags = subCat?.competitionTags ?? [];
+  const competition = mapCompetitors(businessId, locationId, radiusKm, compTags);
   const pricing = analyzePricing(businessId, locationId);
 
   // ─── Financial Engine (business-context aware — no universal multiplier) ───
@@ -348,6 +351,7 @@ export function generateFeasibility(
       capital: profitModel.capital,
       risk: profitModel.risk,
       assumptions: profitModel.assumptions,
+      revenueFormula: subCat?.revenueFormula ?? undefined,
     },
 
     alternatives: alternatives.map((a) => ({
