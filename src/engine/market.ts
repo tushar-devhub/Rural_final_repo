@@ -17,13 +17,14 @@ export function analyzeMarketReach(
   radiusKm: number,
   _businessId: string,
 ): MarketReachData {
-  // Adjust density by radius
-  const radiusFactor = radiusKm === 5 ? 1 : 1.6;
+  // Adjust reach by radius — monotonic: a bigger radius reaches more people.
+  // 5 km is the baseline (factor 1); smaller radii reach less, larger more.
+  const radiusFactor = 0.5 + 0.1 * radiusKm;
   const adjustedPop = Math.round(population * radiusFactor);
   const adjustedHH = Math.round(households * radiusFactor);
 
   const estimatedConsumers = Math.round(adjustedPop * 0.65);
-  const nearbyVillages = radiusKm === 5 ? 6 : 12;
+  const nearbyVillages = Math.round(radiusKm * 1.2);
 
   const customerGroups = [
     { name: "Households", relevance: "high" as const },

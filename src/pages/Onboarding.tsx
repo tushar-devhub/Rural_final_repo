@@ -26,7 +26,7 @@ import {
   MapPin, Search, Store, Lightbulb, IndianRupee,
   CheckCircle2, ArrowLeft, ArrowRight, Edit3, Check,
   TrendingUp, X, Loader2, Sparkles, Navigation, Database, AlertCircle, RotateCcw,
-  Home, Building2, Hammer, Warehouse, KeyRound, HelpCircle, SlidersHorizontal, ChevronDown,
+  Home, Building2, Hammer, Warehouse, KeyRound, HelpCircle, SlidersHorizontal, ChevronDown, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +46,7 @@ const QUICK_AMOUNTS = [
   { label: "₹5L", value: 500000 },
 ];
 
-const RADIUS_OPTIONS = [5, 10, 15, 25];
+const RADIUS_OPTIONS = [1, 2, 5, 10];
 
 function OnboardingInner() {
   const [step, setStep] = useState(0);
@@ -55,7 +55,7 @@ function OnboardingInner() {
   const navigate = useNavigate();
   const {
     location, setLocation, radius, setRadius,
-    business, setBusiness, capital, setCapital,
+    business, setBusiness, capital, setCapital, otherFunding, setOtherFunding,
     subCategory, setSubCategory, placeStatus, setPlaceStatus,
     rentMonthly, setRentMonthly, scaleChoice, setScaleChoice,
     businessAnswers, setBusinessAnswer,
@@ -128,6 +128,7 @@ function OnboardingInner() {
         placeStatus,
         rentMonthly,
         scaleChoice,
+        otherFunding,
       });
       // The calculation itself is fast — hold the polished branded loader
       // for a short minimum so there is no abrupt flash into the dashboard.
@@ -146,7 +147,7 @@ function OnboardingInner() {
       analyzeBusyRef.current = false;
       setAnalyzeError(true);
     }
-  }, [business, location, capital, radius, subCategory, placeStatus, rentMonthly, scaleChoice, navigate, setFeasibility, setIsAnalyzing]);
+  }, [business, location, capital, otherFunding, radius, subCategory, placeStatus, rentMonthly, scaleChoice, navigate, setFeasibility, setIsAnalyzing]);
 
   if (analyzeError) {
     return (
@@ -247,14 +248,17 @@ function OnboardingInner() {
           )}
           {step === 4 && (
             <CapitalStep
-              value={capital} business={business}
+              value={capital} otherFunding={otherFunding} business={business}
               subCategory={subCategory} placeStatus={placeStatus}
               rentMonthly={rentMonthly} scaleChoice={scaleChoice}
-              onChange={(v) => { setCapital(v); setCapitalError(""); }} error={capitalError}
+              onChange={(v) => { setCapital(v); setCapitalError(""); }}
+              onOtherFundingChange={(v) => setOtherFunding(Math.max(0, v || 0))}
+              error={capitalError}
             />
           )}
           {step === 5 && (
             <ReviewStep location={location} radius={radius} business={business} capital={capital}
+              otherFunding={otherFunding}
               subCategory={subCategory} placeStatus={placeStatus} rentMonthly={rentMonthly} scaleChoice={scaleChoice}
               onEditLocation={() => transitionTo(0, "Going to location...")}
               onEditBusiness={() => transitionTo(1, "Going to business...")}
@@ -1061,13 +1065,14 @@ function PlaceStep({ business, subCategory, status, onStatusChange, rentMonthly,
 }
 
 /* ─── Step 4: Capital with dynamic financing preview ─── */
-function CapitalStep({ value, business, subCategory, placeStatus, rentMonthly, scaleChoice, onChange, error }: {
-  value: number; business: BusinessCategory | null;
+function CapitalStep({ value, otherFunding, business, subCategory, placeStatus, rentMonthly, scaleChoice, onChange, onOtherFundingChange, error }: {
+  value: number; otherFunding: number; business: BusinessCategory | null;
   subCategory: BusinessSubCategory | null; placeStatus: PlaceStatus;
   rentMonthly: number; scaleChoice: ScaleChoice;
-  onChange: (v: number) => void; error: string;
+  onChange: (v: number) => void; onOtherFundingChange: (v: number) => void; error: string;
 }) {
   const showPreview = value > 0;
+  const totalFunding = value + otherFunding;
 
   // Business-context aware estimate from the shared financial engine — no
   // universal multiplier. Same model the feasibility dashboard later uses.
@@ -1078,8 +1083,8 @@ function CapitalStep({ value, business, subCategory, placeStatus, rentMonthly, s
     const options = { subCategoryId: subCategory?.id ?? null, placeStatus, rentMonthly, scaleChoice };
     const pc = calculateProjectCost(value, bid, options);
     const projectCost = pc.totalProjectCost;
-    const fundingGap = Math.max(0, projectCost - value);
-    const loan = calculateLoan(value, bid, options);
+    const fundingGap = Math.max(0, projectCost - (value + otherFunding));
+    const loan = calculateLoan(value + otherFunding, bid, options);
     return {
       range,
       projectCost,
@@ -1088,7 +1093,7 @@ function CapitalStep({ value, business, subCategory, placeStatus, rentMonthly, s
       noFinancingNeeded: fundingGap <= 0,
       options,
     };
-  }, [value, business, subCategory, placeStatus, rentMonthly, scaleChoice, showPreview]);
+  }, [value, otherFunding, business, subCategory, placeStatus, rentMonthly, scaleChoice, showPreview]);
 
   return (
     <div className="animate-fade-in">
@@ -1120,6 +1125,17 @@ function CapitalStep({ value, business, subCategory, placeStatus, rentMonthly, s
         ))}
       </div>
 
+      <div className="rounded-xl border border-border bg-[#F4F8EF] p-4 mb-4 animate-fade-in">
+        <p className="text-sm font-semibold text-foreground mb-1">Other funding available? (family / partner / grant / subsidy)</p>
+        <p className="text-xs text-muted-foreground mb-3">
+          This is money you can arrange beyond your own savings. We combine both to calculate your true funding gap.
+        </p>
+        <CurrencyInput value={otherFunding} onChange={onOtherFundingChange} />
+        {totalFunding > 0 && (
+          <p className="mt-2 text-xs font-semibold text-primary">Total available funding: {formatIndianCurrency(totalFunding)}</p>
+        )}
+      </div>
+
       {showPreview && estimate && (
         <div className="rounded-xl bg-[#F4F8EF] border border-border/60 p-4 animate-fade-in space-y-3">
           <p className="text-sm text-muted-foreground">
@@ -1137,8 +1153,9 @@ function CapitalStep({ value, business, subCategory, placeStatus, rentMonthly, s
           <div className="rounded-lg border border-border/60 bg-white divide-y divide-border/60 overflow-hidden text-sm">
             <PreviewRow label="Estimated setup requirement" value={formatIndianCurrency(estimate.projectCost)} note="business type + place + scale" />
             <PreviewRow label="Your contribution" value={formatIndianCurrency(value)} />
+            {otherFunding > 0 && <PreviewRow label="Other funding" value={formatIndianCurrency(otherFunding)} />}
             {estimate.noFinancingNeeded ? (
-              <PreviewRow label="External financing needed" value="None estimated" note="your contribution covers this setup" highlight />
+              <PreviewRow label="External financing needed" value="None estimated" note="your total funding covers this setup" highlight />
             ) : (
               <PreviewRow
                 label="Estimated funding requirement"
@@ -1157,7 +1174,7 @@ function CapitalStep({ value, business, subCategory, placeStatus, rentMonthly, s
               <li>• The selected business type ({business?.name}{subCategory ? ` — ${subCategory.name}` : ""}) and its typical setup requirements</li>
               <li>• Your place arrangement: {PLACE_LABELS[placeStatus]}{placeStatus === "rent" && rentMonthly > 0 ? ` (₹${rentMonthly.toLocaleString("en-IN")}/month rent)` : ""} — owned place means no purchase cost</li>
               <li>• The chosen scale: {SCALE_OPTIONS.find((s) => s.value === scaleChoice)?.label}</li>
-              <li>• Your available contribution against that setup</li>
+              <li>• Your available funding (own {formatIndianCurrency(value)}{otherFunding > 0 ? ` + other ${formatIndianCurrency(otherFunding)}` : ""}) against that setup</li>
             </ul>
             <p className="mt-2 text-[11px] text-muted-foreground/80">
               These are preliminary estimates for decision support. Actual costs and financing depend on local prices, business scale, lender requirements and applicable schemes.
@@ -1192,9 +1209,9 @@ function PreviewRow({ label, value, note, highlight }: {
 }
 
 /* ─── Step 5: Review ─── */
-function ReviewStep({ location, radius, business, capital, subCategory, placeStatus, rentMonthly, scaleChoice, onEditLocation, onEditBusiness, onEditType, onEditPlace, onEditCapital }: {
+function ReviewStep({ location, radius, business, capital, otherFunding, subCategory, placeStatus, rentMonthly, scaleChoice, onEditLocation, onEditBusiness, onEditType, onEditPlace, onEditCapital }: {
   location: Location | null; radius: number; business: BusinessCategory | null;
-  capital: number; subCategory: BusinessSubCategory | null; placeStatus: PlaceStatus; rentMonthly: number; scaleChoice: ScaleChoice;
+  capital: number; otherFunding: number; subCategory: BusinessSubCategory | null; placeStatus: PlaceStatus; rentMonthly: number; scaleChoice: ScaleChoice;
   onEditLocation: () => void; onEditBusiness: () => void; onEditType: () => void; onEditPlace: () => void; onEditCapital: () => void;
 }) {
   return (
@@ -1225,6 +1242,11 @@ function ReviewStep({ location, radius, business, capital, subCategory, placeSta
         <ReviewRow icon={<IndianRupee className="h-4 w-4" />} label="Your Contribution"
           value={capital > 0 ? formatIndianCurrency(capital) : "Not entered"}
           sub="Amount you can contribute from savings" onEdit={onEditCapital} />
+        {otherFunding > 0 && (
+          <ReviewRow icon={<Users className="h-4 w-4" />} label="Other Funding"
+            value={formatIndianCurrency(otherFunding)}
+            sub="Family / partner / grant — counts toward total funding" onEdit={onEditCapital} />
+        )}
       </div>
     </div>
   );

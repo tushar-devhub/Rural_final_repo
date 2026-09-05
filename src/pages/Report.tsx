@@ -424,6 +424,64 @@ export default function Report() {
             </Section>
           )}
 
+          {/* GramUdaan: Funding, Loan & Scenarios */}
+          <Section title="Funding, Loan & Scenarios">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              <StatBlock label="Your Capital" value={formatIndianCurrency(f.financial.availableContribution)} />
+              <StatBlock label="Other Funding" value={formatIndianCurrency(f.financial.otherFunding ?? 0)} />
+              <StatBlock label="Total Project Cost" value={formatIndianCurrency(f.financial.totalProjectCost)} />
+              <StatBlock label="Funding Gap" value={formatIndianCurrency(f.financial.fundingGap ?? 0)} highlight />
+              <StatBlock label="Est. Loan Requirement" value={formatIndianCurrency(f.financial.estimatedLoan ?? 0)} />
+              <StatBlock label="Est. EMI / Month" value={f.financial.loanSimulation ? formatIndianCurrency(f.financial.loanSimulation.emiMonthly) : "₹0"} />
+              <StatBlock label="EMI Stress" value={f.financial.loanSimulation ? f.financial.loanSimulation.stress.label.toLowerCase() : "No loan"} />
+              <StatBlock label="Total Interest" value={f.financial.loanSimulation ? formatIndianCurrency(f.financial.loanSimulation.totalInterest) : "₹0"} />
+            </div>
+            {f.financial.recommendedLoan && f.financial.recommendedLoan.rangeHigh > 0 && (
+              <p className="text-[11px] text-muted-foreground leading-relaxed mb-3">
+                Recommended borrowing range: {formatIndianCurrency(f.financial.recommendedLoan.rangeLow)} – {formatIndianCurrency(f.financial.recommendedLoan.rangeHigh)}.
+                {f.financial.recommendedLoan.reasoning[0]}
+              </p>
+            )}
+            {f.financial.loanSimulation && (
+              <p className="text-[11px] text-muted-foreground leading-relaxed mb-4">
+                {f.financial.loanSimulation.stress.explanation}
+              </p>
+            )}
+            {f.financial.scenarios && (
+              <>
+                <div className="overflow-x-auto mb-2">
+                  <table className="w-full text-[10px]">
+                    <thead>
+                      <tr className="border-b border-border text-left">
+                        <th className="py-1 pr-2 font-semibold text-muted-foreground">Scenario</th>
+                        <th className="py-1 pr-2 font-semibold text-muted-foreground">Revenue</th>
+                        <th className="py-1 pr-2 font-semibold text-muted-foreground">Expenses</th>
+                        <th className="py-1 pr-2 font-semibold text-muted-foreground">Profit</th>
+                        <th className="py-1 pr-2 font-semibold text-muted-foreground">After EMI</th>
+                        <th className="py-1 pr-2 font-semibold text-muted-foreground">Break-even</th>
+                        <th className="py-1 font-semibold text-muted-foreground">Risk</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {f.financial.scenarios.scenarios.map((s) => (
+                        <tr key={s.id} className="border-b border-border/40">
+                          <td className="py-1 pr-2 font-bold">{s.label} <span className="font-normal text-muted-foreground">({s.revenueMultiplier * 100}%)</span></td>
+                          <td className="py-1 pr-2">{formatIndianCurrency(s.monthlyRevenue)}</td>
+                          <td className="py-1 pr-2">{formatIndianCurrency(s.monthlyExpenses)}</td>
+                          <td className={cn("py-1 pr-2 font-semibold", s.monthlyProfit >= 0 ? "text-emerald-600" : "text-red-600")}>{formatIndianCurrency(s.monthlyProfit)}</td>
+                          <td className={cn("py-1 pr-2 font-semibold", s.profitAfterEmi >= 0 ? "text-emerald-600" : "text-red-600")}>{formatIndianCurrency(s.profitAfterEmi)}</td>
+                          <td className="py-1 pr-2">{s.breakEvenMonth ? `~Month ${s.breakEvenMonth}` : "9+ months"}</td>
+                          <td className="py-1 capitalize">{s.risk} risk</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70">{f.financial.scenarios.note}</p>
+              </>
+            )}
+          </Section>
+
           {/* Final Decision */}
           <Section title="Final Decision">
             <div className={cn(

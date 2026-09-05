@@ -1,9 +1,17 @@
 import { analyzeMarketReach, analyzeOpportunity, generateSWOT, identifyRisks, mapCompetitors, analyzePricing, calculateSubScores } from "@/engine/market";
-import { calculateProjectCost, calculateRepayment, calculateLoan, calculateAffordability } from "@/engine/financial";
+import { calculateProjectCost, calculateRepayment, calculateAffordability } from "@/engine/financial";
 import type { CostContext } from "@/engine/costModel";
 import { buildCostBreakdown } from "@/engine/costModel";
 import { buildBusinessModel } from "@/engine/businessModel";
 import { rankAlternativeBusinesses } from "@/engine/alternatives";
+import { determineScheme, simulateLoan, repaymentStress, recommendedLoan } from "@/engine/financial";
+import { buildScenarioAnalysis } from "@/engine/scenarios";
+
+/** Extended analysis context: user capital is separate from other funding
+ * (family / partner / grant) so the funding-gap formula uses total funding. */
+export type FeasibilityOptions = CostContext & {
+  otherFunding?: number;
+};
 import type { FeasibilityData } from "./feasibility-types";
 import { locations } from "./locations";
 
@@ -14,7 +22,7 @@ export function generateFeasibility(
   capital: number,
   locationId: string,
   radiusKm = 5,
-  options?: CostContext,
+  options?: FeasibilityOptions,
 ): FeasibilityData {
   // Get location data
   const location = locations.find((l) => l.id === locationId) || locations[0];
@@ -34,18 +42,57 @@ export function generateFeasibility(
   const pricing = analyzePricing(businessId, locationId);
 
   // ─── Financial Engine (business-context aware — no universal multiplier) ───
+  // Own capital sizes the project; TOTAL AVAILABLE FUNDING (own + other, e.g.
+  // family / partner / grant) closes the gap.
+  const otherFunding = options?.otherFunding ?? 0;
+  const totalAvailableFunding = capital + otherFunding;
   const projectCost = calculateProjectCost(capital, businessId, options);
-  const rawLoan = calculateLoan(capital, businessId, options);
-  // Financing is only presented when there is a real gap between the estimated
-  // project cost and the user's own contribution.
-  const fundingGap = Math.max(0, projectCost.totalProjectCost - capital);
-  const loanInfo = rawLoan && rawLoan.loanAmount > 0 && fundingGap > 0 ? rawLoan : null;
-  const affordability = calculateAffordability(capital, businessId, locationId, options);
+  const fundingGap = Math.max(0, projectCost.totalProjectCost - totalAvailableFunding);
+
+  // Gap-based loan: never manufactured, never negative, capped by the scheme.
+  const scheme = determineScheme(projectCost.rawProjectCost);
+  let loanInfo: { loanAmount: number; interestRate: number; tenureYears: number; moratoriumMonths: number; scheme: { name: string } } | null = null;
+  if (fundingGap > 0 && scheme) {
+    loanInfo = {
+      loanAmount: projectCost.isLimitExceeded ? scheme.maxFunding : Math.min(fundingGap, scheme.maxFunding),
+      interestRate: scheme.interestRate,
+      tenureYears: scheme.tenureYears,
+      moratoriumMonths: scheme.moratoriumMonths,
+      scheme,
+    };
+  }
+  const affordability = calculateAffordability(totalAvailableFunding, businessId, locationId, options);
 
   // ─── GramUdaan: transparent cost breakdown, operating/profit model, alternatives ───
   const costBreakdown = buildCostBreakdown(businessId, options);
   const profitModel = buildBusinessModel(businessId, capital, options);
   const alternatives = rankAlternativeBusinesses(businessId, capital, location, radiusKm);
+
+  // ─── GramUdaan: loan simulation + EMI stress + scenarios ───
+  const loanSimulation = loanInfo && loanInfo.loanAmount > 0
+    ? (() => {
+        const sim = simulateLoan(loanInfo!.loanAmount, loanInfo!.interestRate, loanInfo!.tenureYears);
+        const stress = repaymentStress(sim.emiMonthly, profitModel.monthlyProfit);
+        return {
+          emiMonthly: sim.emiMonthly,
+          totalInterest: sim.totalInterest,
+          totalRepayment: sim.totalRepayment,
+          stress,
+        };
+      })()
+    : null;
+  const recommended = recommendedLoan(
+    fundingGap,
+    profitModel.monthlyProfit,
+    loanInfo?.interestRate ?? 8,
+    loanInfo?.tenureYears ?? 5,
+  );
+  const scenarios = buildScenarioAnalysis(
+    businessId,
+    capital,
+    options,
+    loanSimulation?.emiMonthly ?? 0,
+  );
 
   // ─── Sub-Scores ───
   const subScores = calculateSubScores(
@@ -198,7 +245,7 @@ export function generateFeasibility(
       totalProjectCost: projectCost.totalProjectCost,
       potentialLoan: projectCost.agencyFunding,
       recommendedScheme: fundingGap <= 0
-        ? "Not required — contribution covers the estimated project cost"
+        ? "Not required — available funding covers the estimated project cost"
         : loanInfo
           ? loanInfo.scheme.name
           : "No applicable scheme",
@@ -223,6 +270,29 @@ export function generateFeasibility(
         monthlyRepayment: affordability.monthlyRepayment,
         surplus: affordability.surplusOrDeficit,
         assumptions: affordability.assumptions,
+      },
+      /* ── GramUdaan funding & loan ── */
+      otherFunding,
+      totalAvailableFunding,
+      fundingGap,
+      estimatedLoan: loanInfo ? loanInfo.loanAmount : 0,
+      recommendedLoan: recommended,
+      loanSimulation: loanSimulation ?? undefined,
+      scenarios: {
+        scenarios: scenarios.scenarios.map((s) => ({
+          id: s.id,
+          label: s.label,
+          labelHi: s.labelHi,
+          revenueMultiplier: s.revenueMultiplier,
+          monthlyRevenue: s.monthlyRevenue,
+          monthlyExpenses: s.monthlyExpenses,
+          monthlyProfit: s.monthlyProfit,
+          profitAfterEmi: s.profitAfterEmi,
+          breakEvenMonth: s.breakEvenMonth,
+          risk: s.risk,
+          summary: s.summary,
+        })),
+        note: scenarios.note,
       },
     },
 

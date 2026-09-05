@@ -26,6 +26,7 @@ interface OnboardingState {
   scaleChoice: ScaleChoice;
   businessAnswers: Record<string, string>;
   capital: number;
+  otherFunding: number;
   feasibility: FeasibilityData | null;
   isAnalyzing: boolean;
 }
@@ -40,6 +41,7 @@ interface OnboardingContextType extends OnboardingState {
   setScaleChoice: (s: ScaleChoice) => void;
   setBusinessAnswer: (id: string, value: string) => void;
   setCapital: (c: number) => void;
+  setOtherFunding: (f: number) => void;
   setFeasibility: (f: FeasibilityData | null) => void;
   setIsAnalyzing: (a: boolean) => void;
   reset: () => void;
@@ -56,6 +58,7 @@ const defaultState: OnboardingState = {
   scaleChoice: "recommended",
   businessAnswers: {},
   capital: 0,
+  otherFunding: 0,
   feasibility: null,
   isAnalyzing: false,
 };
@@ -83,6 +86,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, businessAnswers: { ...s.businessAnswers, [id]: value } }));
   const setCapital = (capital: number) =>
     setState((s) => ({ ...s, capital }));
+  const setOtherFunding = (otherFunding: number) =>
+    setState((s) => ({ ...s, otherFunding }));
   const setFeasibility = (feasibility: FeasibilityData | null) =>
     setState((s) => ({ ...s, feasibility }));
   const setIsAnalyzing = (isAnalyzing: boolean) =>
@@ -103,6 +108,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       scaleChoice: "recommended",
       businessAnswers: {},
       capital: demo.capital,
+      otherFunding: 0,
       feasibility,
       isAnalyzing: false,
     });
@@ -121,6 +127,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         setScaleChoice,
         setBusinessAnswer,
         setCapital,
+        setOtherFunding,
         setFeasibility,
         setIsAnalyzing,
         reset,
@@ -143,6 +150,7 @@ const defaultContextValue: OnboardingContextType = {
   setScaleChoice: () => {},
   setBusinessAnswer: () => {},
   setCapital: () => {},
+  setOtherFunding: () => {},
   setFeasibility: () => {},
   setIsAnalyzing: () => {},
   reset: () => {},

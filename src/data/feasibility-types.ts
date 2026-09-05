@@ -91,6 +91,44 @@ export interface FeasibilityData {
       surplus: number;
       assumptions: string[];
     };
+    /* ── GramUdaan funding & loan additions ── */
+    otherFunding?: number;
+    totalAvailableFunding?: number;
+    fundingGap?: number;
+    estimatedLoan?: number;
+    recommendedLoan?: {
+      requiredLoan: number;
+      rangeLow: number;
+      rangeHigh: number;
+      reasoning: string[];
+    };
+    loanSimulation?: {
+      emiMonthly: number;
+      totalInterest: number;
+      totalRepayment: number;
+      stress: {
+        level: "low" | "medium" | "high";
+        label: string;
+        ratio: number;
+        explanation: string;
+      };
+    };
+    scenarios?: {
+      scenarios: {
+        id: "conservative" | "expected" | "optimistic";
+        label: string;
+        labelHi: string;
+        revenueMultiplier: number;
+        monthlyRevenue: number;
+        monthlyExpenses: number;
+        monthlyProfit: number;
+        profitAfterEmi: number;
+        breakEvenMonth: number | null;
+        risk: "low" | "medium" | "high";
+        summary: string;
+      }[];
+      note: string;
+    };
   };
   decision: {
     recommendation: "good" | "caution" | "rethink";

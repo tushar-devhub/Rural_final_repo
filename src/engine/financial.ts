@@ -269,6 +269,156 @@ export function calculateRepayment(
   };
 }
 
+/* ─── Loan Simulator ───
+ * Standard amortizing loan: user can vary amount / rate / tenure and get an
+ * immediate EMI + total interest + total repayment. All estimates only.
+ */
+
+export interface LoanSimulation {
+  loanAmount: number;
+  annualRate: number;
+  tenureYears: number;
+  emiMonthly: number;      // monthly EMI (₹)
+  totalInterest: number;   // total interest over tenure (₹)
+  totalRepayment: number;  // principal + interest (₹)
+}
+
+export function simulateLoan(
+  loanAmount: number,
+  annualRate: number,
+  tenureYears: number,
+): LoanSimulation {
+  const principal = Math.max(0, loanAmount);
+  const rate = Math.max(0, annualRate) / 100 / 12;
+  const months = Math.max(1, Math.round(tenureYears * 12));
+
+  let emiMonthly: number;
+  if (rate > 0) {
+    emiMonthly = (principal * rate * Math.pow(1 + rate, months)) / (Math.pow(1 + rate, months) - 1);
+  } else {
+    emiMonthly = principal / months;
+  }
+
+  const totalRepayment = emiMonthly * months;
+  return {
+    loanAmount: principal,
+    annualRate,
+    tenureYears,
+    emiMonthly: Math.round(emiMonthly),
+    totalInterest: Math.round(Math.max(0, totalRepayment - principal)),
+    totalRepayment: Math.round(totalRepayment),
+  };
+}
+
+/* ─── EMI Stress Test ───
+ * Compares monthly EMI against estimated operating profit and classifies
+ * repayment pressure LOW / MEDIUM / HIGH — never a guarantee.
+ */
+
+export interface RepaymentStress {
+  level: "low" | "medium" | "high";
+  label: string;
+  ratio: number; // emi / operating profit
+  explanation: string;
+}
+
+export function repaymentStress(emiMonthly: number, operatingProfit: number): RepaymentStress {
+  if (emiMonthly <= 0) {
+    return {
+      level: "low",
+      label: "LOW REPAYMENT PRESSURE",
+      ratio: 0,
+      explanation: "No loan repayment is estimated — the business does not depend on external financing.",
+    };
+  }
+  if (operatingProfit <= 0) {
+    return {
+      level: "high",
+      label: "HIGH REPAYMENT PRESSURE",
+      ratio: 0,
+      explanation: "The estimated operating profit is negative or zero, so any loan repayment would consume the entire cash flow. Reconsider the loan amount or start at a smaller scale.",
+    };
+  }
+  const ratio = emiMonthly / operatingProfit;
+  let level: "low" | "medium" | "high";
+  let explanation: string;
+  if (ratio <= 0.3) {
+    level = "low";
+    explanation = `EMI is about ${Math.round(ratio * 100)}% of the estimated operating profit — repayment pressure is low and most of the profit stays in the business.`;
+  } else if (ratio <= 0.5) {
+    level = "medium";
+    explanation = `EMI is about ${Math.round(ratio * 100)}% of the estimated operating profit — repayment is manageable but leaves a thinner buffer for shocks.`;
+  } else {
+    level = "high";
+    explanation = `EMI is about ${Math.round(ratio * 100)}% of the estimated operating profit — repayment would consume a large share of profit. A smaller loan or longer tenure is worth considering.`;
+  }
+  return { level, label: `${level.toUpperCase()} REPAYMENT PRESSURE`, ratio, explanation };
+}
+
+/* ─── Recommended Borrowing Range ───
+ * The *required* loan is simply the funding gap, but we do not encourage
+ * borrowing the full gap blindly. The *recommended* range is bounded by:
+ *   • lower bound — enough to cover the unavoidable gap
+ *   • upper bound — the largest loan whose monthly EMI stays within ~40% of
+ *     the estimated operating profit (a common affordability guideline), so
+ *     repayment does not swallow the business's cash flow.
+ */
+
+export interface RecommendedLoan {
+  requiredLoan: number;
+  rangeLow: number;
+  rangeHigh: number;
+  reasoning: string[];
+}
+
+export function recommendedLoan(
+  fundingGap: number,
+  operatingProfit: number,
+  annualRate: number,
+  tenureYears: number,
+): RecommendedLoan {
+  const requiredLoan = Math.max(0, fundingGap);
+  const reasoning: string[] = [];
+  if (requiredLoan <= 0) {
+    return {
+      requiredLoan: 0,
+      rangeLow: 0,
+      rangeHigh: 0,
+      reasoning: [
+        "Your available funding covers the estimated project cost — no external borrowing is required.",
+        "Avoid taking a loan if you do not need one.",
+      ],
+    };
+  }
+
+  // Largest loan whose EMI stays within 40% of operating profit.
+  const affordableEmi = operatingProfit * 0.4;
+  let affordableLoan = requiredLoan;
+  if (affordableEmi > 0) {
+    const monthlyRate = Math.max(0, annualRate) / 100 / 12;
+    const months = Math.max(1, Math.round(tenureYears * 12));
+    if (monthlyRate > 0) {
+      affordableLoan = (affordableEmi * (Math.pow(1 + monthlyRate, months) - 1)) /
+        (monthlyRate * Math.pow(1 + monthlyRate, months));
+    } else {
+      affordableLoan = affordableEmi * months;
+    }
+  }
+
+  const rangeHigh = Math.min(requiredLoan, Math.max(0, Math.floor(affordableLoan / 1000) * 1000));
+  const rangeLow = Math.round(Math.min(requiredLoan, rangeHigh * 0.6) / 1000) * 1000;
+
+  if (rangeHigh >= requiredLoan * 0.95) {
+    reasoning.push(`The funding gap of ₹${requiredLoan.toLocaleString("en-IN")} fits within your estimated repayment capacity — borrowing the full gap appears manageable under current assumptions.`);
+  } else {
+    reasoning.push(`Borrowing the full ₹${requiredLoan.toLocaleString("en-IN")} gap would make EMI heavy. A recommended borrowing range of ₹${rangeLow.toLocaleString("en-IN")} – ₹${rangeHigh.toLocaleString("en-IN")} keeps the estimated EMI within ~40% of operating profit.`);
+    reasoning.push("Cover the remaining gap by increasing own capital, other funding, or starting at a smaller scale.");
+  }
+  reasoning.push("All figures are estimates for decision support — verify with the lender before committing.");
+
+  return { requiredLoan, rangeLow, rangeHigh, reasoning };
+}
+
 /* ─── Affordability ─── */
 
 export function calculateAffordability(
