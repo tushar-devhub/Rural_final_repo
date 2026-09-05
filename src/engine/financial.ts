@@ -36,35 +36,15 @@ export const LOAN_SCHEMES: LoanScheme[] = [
 
 /* ─── Business startup cost ranges ───
  * Canonical numeric ranges for a *typical rural micro setup* per business,
- * aligned with the investment ranges shown in the business catalogue
- * (₹ min – ₹ max). These are estimates for decision support — never exact
- * quotes. Used by the project-cost model below.
+ * living in the business configuration layer so cost/scale/operating models
+ * all share one source of truth.
  */
 
-export interface BusinessStartupRange {
-  min: number;
-  max: number;
-}
-
-export const BUSINESS_STARTUP_RANGES: Record<string, BusinessStartupRange> = {
-  dairy: { min: 100000, max: 500000 },
-  grocery: { min: 50000, max: 300000 },
-  poultry: { min: 150000, max: 800000 },
-  "poultry-feed": { min: 75000, max: 400000 },
-  clothing: { min: 80000, max: 500000 },
-  "mobile-repair": { min: 30000, max: 200000 },
-  "food-processing": { min: 100000, max: 600000 },
-  "agri-inputs": { min: 100000, max: 500000 },
-  retail: { min: 50000, max: 300000 },
-  services: { min: 20000, max: 200000 },
-  manufacturing: { min: 200000, max: 1000000 },
-  other: { min: 50000, max: 500000 },
-};
-
-/** Typical project size band (₹) for a business id, with a safe default. */
-export function startupCostRange(businessId: string): BusinessStartupRange {
-  return BUSINESS_STARTUP_RANGES[businessId] ?? BUSINESS_STARTUP_RANGES.other;
-}
+export { BUSINESS_STARTUP_RANGES, startupCostRange } from "@/data/businessConfig";
+export type { BusinessStartupRange } from "@/data/businessConfig";
+import { startupCostRange } from "@/data/businessConfig";
+import { buildCostBreakdown, type CostContext } from "./costModel";
+import { buildBusinessModel } from "./businessModel";
 
 /* ─── Project Cost Calculation ───
  * Business-context aware. No universal multiplier:
@@ -77,21 +57,30 @@ export function startupCostRange(businessId: string): BusinessStartupRange {
  *     contribution is treated as a buffer, funding gap = ₹0.
  */
 
-export function calculateProjectCost(contribution: number, businessId = "other"): ProjectCostBreakdown {
-  const { min, max } = startupCostRange(businessId);
-  const typical = Math.round((min + max) / 2);
-
+export function calculateProjectCost(
+  contribution: number,
+  businessId = "other",
+  options?: CostContext,
+): ProjectCostBreakdown {
   let estimatedProjectCost: number;
-  if (contribution <= 0) {
-    estimatedProjectCost = min; // no own money yet → minimum viable setup
-  } else if (contribution < min) {
-    estimatedProjectCost = min; // minimum viable scale for this business
-  } else if (contribution < typical) {
-    estimatedProjectCost = typical; // needs some financing to reach typical scale
-  } else if (contribution <= max) {
-    estimatedProjectCost = contribution; // own money already covers a typical setup
+  if (options && (options.subCategoryId || options.placeStatus || options.scaleChoice)) {
+    // Ownership- and scale-aware: the transparent cost breakdown is the
+    // project cost. The user's place status directly changes the total.
+    estimatedProjectCost = buildCostBreakdown(businessId, options).total;
   } else {
-    estimatedProjectCost = max; // above typical scope — capped at full typical setup
+    const { min, max } = startupCostRange(businessId);
+    const typical = Math.round((min + max) / 2);
+    if (contribution <= 0) {
+      estimatedProjectCost = min; // no own money yet → minimum viable setup
+    } else if (contribution < min) {
+      estimatedProjectCost = min; // minimum viable scale for this business
+    } else if (contribution < typical) {
+      estimatedProjectCost = typical; // needs some financing to reach typical scale
+    } else if (contribution <= max) {
+      estimatedProjectCost = contribution; // own money already covers a typical setup
+    } else {
+      estimatedProjectCost = max; // above typical scope — capped at full typical setup
+    }
   }
 
   const rawProjectCost = estimatedProjectCost;
@@ -158,8 +147,8 @@ export function determineScheme(projectCost: number): LoanScheme | null {
   return null;
 }
 
-export function getSchemeAssignment(contribution: number, businessId = "other"): SchemeAssignment | null {
-  const projectCost = calculateProjectCost(contribution, businessId);
+export function getSchemeAssignment(contribution: number, businessId = "other", options?: CostContext): SchemeAssignment | null {
+  const projectCost = calculateProjectCost(contribution, businessId, options);
   const scheme = determineScheme(projectCost.rawProjectCost);
 
   if (!scheme) return null;
@@ -172,6 +161,7 @@ export function getSchemeAssignment(contribution: number, businessId = "other"):
 export function calculateLoan(
   contribution: number,
   businessId = "other",
+  options?: CostContext,
 ): {
   loanAmount: number;
   interestRate: number;
@@ -179,7 +169,7 @@ export function calculateLoan(
   moratoriumMonths: number;
   scheme: LoanScheme;
 } | null {
-  const assignment = getSchemeAssignment(contribution, businessId);
+  const assignment = getSchemeAssignment(contribution, businessId, options);
   if (!assignment) return null;
 
   const { scheme, projectCost } = assignment;
@@ -285,32 +275,41 @@ export function calculateAffordability(
   contribution: number,
   businessId: string,
   _locationId: string,
+  options?: CostContext,
 ): AffordabilityResult {
-  // Deterministic revenue/cost estimates by business type
-  const estimates: Record<string, { revenue: [number, number]; costs: number }> = {
-    dairy: { revenue: [35000, 55000], costs: 22000 },
-    grocery: { revenue: [30000, 50000], costs: 20000 },
-    poultry: { revenue: [40000, 70000], costs: 28000 },
-    "poultry-feed": { revenue: [25000, 45000], costs: 15000 },
-    clothing: { revenue: [20000, 40000], costs: 12000 },
-    "mobile-repair": { revenue: [15000, 30000], costs: 8000 },
-    "food-processing": { revenue: [30000, 60000], costs: 20000 },
-    "agri-inputs": { revenue: [35000, 55000], costs: 22000 },
-    retail: { revenue: [25000, 45000], costs: 15000 },
-    services: { revenue: [15000, 35000], costs: 8000 },
-    manufacturing: { revenue: [40000, 80000], costs: 30000 },
-  };
+  let expectedMonthlyRevenue: number;
+  let operatingCosts: number;
 
-  const est = estimates[businessId] || { revenue: [20000, 40000], costs: 15000 };
-
-  // Use midpoint of revenue range
-  const expectedMonthlyRevenue = Math.round((est.revenue[0] + est.revenue[1]) / 2);
-  const operatingCosts = est.costs;
+  if (options && (options.subCategoryId || options.placeStatus || options.scaleChoice)) {
+    // Sub-category / ownership / scale aware — same operating model the
+    // profit timeline and scale analysis use.
+    const model = buildBusinessModel(businessId, contribution, options);
+    expectedMonthlyRevenue = model.monthlyRevenue;
+    operatingCosts = model.monthlyExpenses;
+  } else {
+    // Deterministic revenue/cost estimates by business type
+    const estimates: Record<string, { revenue: [number, number]; costs: number }> = {
+      dairy: { revenue: [35000, 55000], costs: 22000 },
+      grocery: { revenue: [30000, 50000], costs: 20000 },
+      poultry: { revenue: [40000, 70000], costs: 28000 },
+      "poultry-feed": { revenue: [25000, 45000], costs: 15000 },
+      clothing: { revenue: [20000, 40000], costs: 12000 },
+      "mobile-repair": { revenue: [15000, 30000], costs: 8000 },
+      "food-processing": { revenue: [30000, 60000], costs: 20000 },
+      "agri-inputs": { revenue: [35000, 55000], costs: 22000 },
+      retail: { revenue: [25000, 45000], costs: 15000 },
+      services: { revenue: [15000, 35000], costs: 8000 },
+      manufacturing: { revenue: [40000, 80000], costs: 30000 },
+    };
+    const est = estimates[businessId] || { revenue: [20000, 40000], costs: 15000 };
+    expectedMonthlyRevenue = Math.round((est.revenue[0] + est.revenue[1]) / 2);
+    operatingCosts = est.costs;
+  }
 
   const monthlyCashFlow = expectedMonthlyRevenue - operatingCosts;
 
   // Calculate monthly repayment from loan (business-aware — loan is the real gap)
-  const loanInfo = calculateLoan(contribution, businessId);
+  const loanInfo = calculateLoan(contribution, businessId, options);
   let monthlyRepayment = 0;
 
   if (loanInfo) {

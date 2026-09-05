@@ -141,14 +141,14 @@ export class PdfWriter {
       this.doc.setFontSize(6.8);
       this.doc.setTextColor(...MUTED);
       const disclaimer =
-        "Prepared with RuralBiz AI. This document is an AI-generated application draft for preparation purposes. Final application format, eligibility, documentation, loan amount, interest rate and approval are determined by the concerned bank/financial institution or implementing authority.";
+        "Prepared with GramUdaan. This document is an AI-generated application draft for preparation purposes. Final application format, eligibility, documentation, loan amount, interest rate and approval are determined by the concerned bank/financial institution or implementing authority.";
       const discLines = this.doc.splitTextToSize(sanitize(disclaimer), CONTENT_W - 30) as string[];
       discLines.forEach((ln, idx) => {
         this.doc.text(ln, MARGIN, PAGE_H - FOOTER - 4 + idx * 3);
       });
       this.doc.setFont("helvetica", "normal");
       this.doc.text(`Page ${i} of ${count}`, PAGE_W - MARGIN, PAGE_H - FOOTER - 4, { align: "right" });
-      this.doc.text("RuralBiz AI - Loan Application Draft", MARGIN, PAGE_H - FOOTER - 4);
+      this.doc.text("GramUdaan - Loan Application Draft", MARGIN, PAGE_H - FOOTER - 4);
     }
   }
 }
@@ -165,7 +165,7 @@ export function buildLoanPdf(draft: LoanDraft): jsPDF {
   d.setFont("helvetica", "bold");
   d.setFontSize(14);
   d.setTextColor(255, 255, 255);
-  d.text("RuralBiz AI", MARGIN, 10);
+  d.text("GramUdaan", MARGIN, 10);
   d.setFontSize(8);
   d.setFont("helvetica", "normal");
   d.text("Rural business feasibility & financial advisory", MARGIN, 15);
@@ -224,11 +224,11 @@ export function buildLoanPdf(draft: LoanDraft): jsPDF {
   w.kv("Other funding sources", fin.otherSources || "None stated");
   w.spacer(2);
 
-  w.heading("5. Business Projections (RuralBiz estimate)");
+  w.heading("5. Business Projections (GramUdaan estimate)");
   w.kv("Expected monthly revenue", rup(fin.monthlyRevenue));
   w.kv("Estimated monthly expenses", rup(fin.monthlyExpenses));
   w.kv("Estimated monthly surplus", rup(fin.monthlyProfit));
-  w.paragraph("These projections are RuralBiz estimates generated from the feasibility analysis. Actual revenue depends on market conditions and business execution.", { size: 8, color: MUTED });
+  w.paragraph("These projections are GramUdaan estimates generated from the feasibility analysis. Actual revenue depends on market conditions and business execution.", { size: 8, color: MUTED });
   w.spacer(2);
 
   // 6. Market
@@ -247,11 +247,11 @@ export function buildLoanPdf(draft: LoanDraft): jsPDF {
   // 8. Scheme
   w.heading("8. Scheme / Financing Context");
   if (scheme) {
-    w.paragraph(`Potential financing option explored: ${scheme.name}. Selected from RuralBiz's preliminary scheme matching - it is not an approval or an eligibility certificate.`);
+    w.paragraph(`Potential financing option explored: ${scheme.name}. Selected from GramUdaan's preliminary scheme matching - it is not an approval or an eligibility certificate.`);
     scheme.supportStructure.forEach((s) => w.kv(s.label, s.text));
     w.paragraph("Preliminary match - final eligibility, benefits and loan terms must be confirmed by the concerned bank/financial institution or implementing authority.", { size: 8.5, color: MUTED });
   } else {
-    w.paragraph("No specific scheme was selected for this draft. Review 'Government Schemes & Financing' on the RuralBiz dashboard for potentially relevant options before submitting.", { size: 8.5, color: MUTED });
+    w.paragraph("No specific scheme was selected for this draft. Review 'Government Schemes & Financing' on the GramUdaan dashboard for potentially relevant options before submitting.", { size: 8.5, color: MUTED });
   }
   w.spacer(2);
 
@@ -276,5 +276,5 @@ export function buildLoanPdf(draft: LoanDraft): jsPDF {
 export function downloadLoanPdf(draft: LoanDraft): void {
   const doc = buildLoanPdf(draft);
   const date = new Date(draft.meta.updatedAt || Date.now()).toISOString().slice(0, 10);
-  doc.save(`RuralBiz-Loan-Application-Draft-${date}.pdf`);
+  doc.save(`GramUdaan-Loan-Application-Draft-${date}.pdf`);
 }

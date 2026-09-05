@@ -11,7 +11,7 @@ export function Footer() {
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
                 <Globe className="h-5 w-5" />
               </div>
-              <span className="text-xl font-bold font-sans-body">RuralBiz AI</span>
+              <span className="text-xl font-bold font-sans-body">GramUdaan</span>
             </div>
             <p className="text-sm text-primary-foreground/70 leading-relaxed max-w-xs">
               An AI-powered business advisory platform helping rural and semi-urban
@@ -79,7 +79,7 @@ export function Footer() {
 
         <div className="mt-10 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-primary-foreground/50">
-            © 2026 RuralBiz AI. All rights reserved.
+            © 2026 GramUdaan. All rights reserved.
           </p>
           <p className="text-xs text-primary-foreground/40 text-center sm:text-right max-w-md">
             Recommendations are based on available data, estimates and defined rules. Verify critical financial and regulatory information before making investment decisions.

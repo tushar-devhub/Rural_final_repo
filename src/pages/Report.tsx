@@ -104,7 +104,7 @@ export default function Report() {
           {/* Header */}
           <div className="text-center border-b border-border pb-8 mb-8">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
-              RuralBiz AI
+              GramUdaan
             </p>
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
               Business Decision Report
@@ -305,6 +305,108 @@ export default function Report() {
             </div>
           </Section>
 
+          {/* GramUdaan: Transparent Cost Breakdown */}
+          {f.costBreakdown && (
+            <Section title="Cost Breakdown (How the Estimate Was Built)">
+              <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                The estimated initial requirement of {formatIndianCurrency(f.costBreakdown.total)} is built from the components below. Amounts marked “calculated” come from the business type, place arrangement and scale; “estimated” items are typical rural-market assumptions.
+              </p>
+              <div className="space-y-1 mb-3">
+                {f.costBreakdown.components.filter((c) => c.amount > 0).map((c) => (
+                  <div key={c.id} className="flex items-center justify-between text-xs">
+                    <span className="text-foreground">{c.label} <span className="text-muted-foreground">({c.source.toLowerCase()})</span></span>
+                    <span className="font-semibold">{formatIndianCurrency(c.amount)}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between text-xs font-bold border-t border-border pt-1.5 mt-1.5">
+                  <span>TOTAL</span>
+                  <span>{formatIndianCurrency(f.costBreakdown.total)}</span>
+                </div>
+              </div>
+              {f.costBreakdown.monthlyRentEstimate > 0 && (
+                <p className="text-[11px] text-muted-foreground mb-2">If renting: estimated monthly rent {formatIndianCurrency(f.costBreakdown.monthlyRentEstimate)}.</p>
+              )}
+              {f.costBreakdown.notes.map((n, i) => (
+                <p key={i} className="text-[10px] text-muted-foreground/80">• {n}</p>
+              ))}
+            </Section>
+          )}
+
+          {/* GramUdaan: Profit Timeline & Break-even */}
+          {f.profitModel && (
+            <Section title="Profit Timeline, Break-even & Risk">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                <StatBlock label="Est. Monthly Revenue" value={formatIndianCurrency(f.profitModel.monthlyRevenue)} />
+                <StatBlock label="Est. Monthly Expenses" value={formatIndianCurrency(f.profitModel.monthlyExpenses)} />
+                <StatBlock label="Est. Monthly Profit" value={formatIndianCurrency(f.profitModel.monthlyProfit)} />
+                <StatBlock label="Operating Break-even" value={f.profitModel.breakEvenMonth ? `~Month ${f.profitModel.breakEvenMonth}` : "9+ months"} />
+              </div>
+              <div className="overflow-x-auto mb-3">
+                <table className="w-full text-[10px]">
+                  <thead>
+                    <tr className="border-b border-border text-left">
+                      <th className="py-1 pr-2 font-semibold text-muted-foreground">Month</th>
+                      <th className="py-1 pr-2 font-semibold text-muted-foreground">Revenue</th>
+                      <th className="py-1 pr-2 font-semibold text-muted-foreground">Expenses</th>
+                      <th className="py-1 pr-2 font-semibold text-muted-foreground">Profit/Loss</th>
+                      <th className="py-1 font-semibold text-muted-foreground">Cumulative</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {f.profitModel.timeline.slice(0, 12).map((p) => (
+                      <tr key={p.month} className="border-b border-border/40">
+                        <td className="py-1 pr-2 font-semibold">{p.label}</td>
+                        <td className="py-1 pr-2">{formatIndianCurrency(p.revenue)}</td>
+                        <td className="py-1 pr-2">{formatIndianCurrency(p.expenses)}</td>
+                        <td className={cn("py-1 pr-2 font-semibold", p.profit >= 0 ? "text-emerald-600" : "text-red-600")}>{formatIndianCurrency(p.profit)}</td>
+                        <td className="py-1">{formatIndianCurrency(p.cumulative)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
+                {f.profitModel.breakEvenMonth
+                  ? `Under current assumptions the business is estimated to cover its operating costs around month ${f.profitModel.breakEvenMonth} (break-even sales ≈ ${formatIndianCurrency(f.profitModel.breakEvenSales)}/month). Early months may show a loss as customers build up.`
+                  : "Under current assumptions operating break-even is not reached within 12 months — revisit scale, pricing or costs."}
+              </p>
+              <p className="text-[11px] font-bold text-foreground mb-1">Profit-based risk: {f.profitModel.risk.label}</p>
+              <ul className="space-y-0.5 text-[10px] text-muted-foreground mb-2">
+                {f.profitModel.risk.reasons.positive.map((r, i) => <li key={`p${i}`}>✓ {r}</li>)}
+                {f.profitModel.risk.reasons.concerns.map((r, i) => <li key={`c${i}`}>⚠ {r}</li>)}
+              </ul>
+              <p className="text-[10px] text-muted-foreground/70">
+                Capital utilisation — available {formatIndianCurrency(f.profitModel.capital.availableCapital)} · required (recommended scale) {formatIndianCurrency(f.profitModel.capital.requiredInvestment)} · gap {formatIndianCurrency(f.profitModel.capital.fundingGap)} · remaining {formatIndianCurrency(f.profitModel.capital.remainingCapital)}.
+                {f.profitModel.capital.allocationSuggestions[0] ? ` Possible use of remaining capital: ${f.profitModel.capital.allocationSuggestions.slice(0, 2).join("; ")}.` : ""}
+              </p>
+            </Section>
+          )}
+
+          {/* GramUdaan: Alternative Businesses */}
+          {f.alternatives && f.alternatives.length > 0 && (
+            <Section title="Alternative Businesses Worth Comparing">
+              <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                Ranked for your {formatIndianCurrency(f.financial.availableContribution)} capital and selected location — by capital fit, estimated profit, risk and local feasibility.
+              </p>
+              <div className="space-y-2">
+                {f.alternatives.map((a, i) => (
+                  <div key={a.businessId} className="rounded-lg border border-border p-3">
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <p className="text-xs font-bold text-foreground">{a.icon} {a.businessName} <span className="font-normal text-muted-foreground">({a.subCategoryName})</span></p>
+                      <span className="text-xs font-bold text-primary">Fit {a.fitScore}/100</span>
+                    </div>
+                    <ul className="mt-1.5 space-y-0.5">
+                      {a.reasons.map((r, j) => <li key={j} className="text-[10px] text-muted-foreground flex items-start gap-1"><span className="text-primary font-bold">•</span> {r}</li>)}
+                    </ul>
+                    <p className="mt-1.5 text-[10px] text-muted-foreground/80">
+                      Needs {formatIndianCurrency(a.requiredInvestment)} · monthly revenue ~{formatIndianCurrency(a.monthlyRevenue)} · profit ~{formatIndianCurrency(a.monthlyProfit)} · margin {a.margin}% · feasibility {a.feasibilityScore}/100 · break-even {a.breakEvenMonth ? `~month ${a.breakEvenMonth}` : "9+ months"} · {a.risk} risk
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
           {/* Potential Government Schemes */}
           {schemeResult && (
             <Section title="Potential Government Schemes">
@@ -365,7 +467,7 @@ export default function Report() {
           {/* Disclaimer */}
           <div className="mt-8 pt-6 border-t border-border">
             <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-              This report is generated by RuralBiz AI using simulated market data for demonstration purposes. Financial calculations are deterministic and based on PMEGP/MUDRA scheme rules. Recommendations should be verified with local market conditions and professional advisors before making investment decisions. RuralBiz AI does not guarantee loan approval or business success.
+              This report is generated by GramUdaan using simulated market data for demonstration purposes. Financial calculations are deterministic and based on PMEGP/MUDRA scheme rules. Recommendations should be verified with local market conditions and professional advisors before making investment decisions. GramUdaan does not guarantee loan approval or business success.
             </p>
           </div>
         </div>

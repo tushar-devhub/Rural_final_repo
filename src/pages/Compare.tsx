@@ -223,6 +223,34 @@ export default function Compare() {
                   label="Households"
                   values={results.map((r) => ({ value: r.feasibility.marketReach.households.toLocaleString("en-IN") }))}
                 />
+                <ComparisonRow
+                  label="Required Investment"
+                  values={results.map((r) => ({ value: formatIndianCurrency(r.feasibility.profitModel?.capital.requiredInvestment ?? r.feasibility.financial.totalProjectCost) }))}
+                />
+                <ComparisonRow
+                  label="Est. Monthly Revenue"
+                  values={results.map((r) => ({ value: formatIndianCurrency(r.feasibility.profitModel?.monthlyRevenue ?? 0) }))}
+                />
+                <ComparisonRow
+                  label="Est. Monthly Profit"
+                  values={results.map((r) => ({ value: formatIndianCurrency(r.feasibility.profitModel?.monthlyProfit ?? 0) }))}
+                />
+                <ComparisonRow
+                  label="Profit Margin"
+                  values={results.map((r) => ({ value: r.feasibility.profitModel ? `${r.feasibility.profitModel.profitMargin}%` : "—" }))}
+                />
+                <ComparisonRow
+                  label="Break-even"
+                  values={results.map((r) => ({ value: r.feasibility.profitModel?.breakEvenMonth ? `~Month ${r.feasibility.profitModel.breakEvenMonth}` : "9+ months" }))}
+                />
+                <ComparisonRow
+                  label="Profit-based Risk"
+                  values={results.map((r) => ({ value: r.feasibility.profitModel ? r.feasibility.profitModel.risk.label : "—" }))}
+                />
+                <ComparisonRow
+                  label="Funding Gap"
+                  values={results.map((r) => ({ value: formatIndianCurrency(r.feasibility.profitModel?.capital.fundingGap ?? 0) }))}
+                />
               </tbody>
             </table>
           </div>

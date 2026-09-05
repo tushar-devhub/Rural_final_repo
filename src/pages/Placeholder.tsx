@@ -33,7 +33,7 @@ export default function PlaceholderPage({ type = "default" }: PlaceholderProps) 
   const data = placeholderData[type] || {
     title: "Coming Soon",
     titleHi: "जल्द आ रहा है",
-    description: "This feature is under development and will be available in a future version of RuralBiz AI.",
+    description: "This feature is under development and will be available in a future version of GramUdaan.",
   };
 
   return (
@@ -50,7 +50,7 @@ export default function PlaceholderPage({ type = "default" }: PlaceholderProps) 
             {data.description}
           </p>
           <p className="text-xs text-muted-foreground/60 mt-2">
-            Coming in a future version of RuralBiz AI
+            Coming in a future version of GramUdaan
           </p>
           <Link
             to="/"

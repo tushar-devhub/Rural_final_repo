@@ -1,7 +1,7 @@
 /* ─── Government Scheme Knowledge Layer ───
  *
  * This module is the SINGLE source of truth for government scheme data used
- * across RuralBiz AI (dashboard section, report, AI advisor).
+ * across GramUdaan (dashboard section, report, AI advisor).
  *
  * Accuracy rules (hard requirements):
  *   • Only widely published, scheme-level facts are stored here.
@@ -63,7 +63,7 @@ export interface SchemeProfileInput {
 }
 
 export const SCHEME_DISCLAIMER =
-  "RuralBiz provides an AI-assisted preliminary match only. Final eligibility, benefits and approval depend on the official scheme guidelines and the relevant authority/lender.";
+  "GramUdaan provides an AI-assisted preliminary match only. Final eligibility, benefits and approval depend on the official scheme guidelines and the relevant authority/lender.";
 
 export const SCHEME_VERIFY_NOTE =
   "Scheme information is provided for preliminary guidance. Please verify current terms with the official source before relying on it.";
@@ -242,7 +242,7 @@ export const governmentSchemes: GovernmentScheme[] = [
       name: "MUDRA — Official Portal (mudra.org.in)",
       url: "https://www.mudra.org.in/offerings",
     },
-    note: "Loan amount, interest and tenure are decided by the lending institution, not by RuralBiz or MUDRA alone.",
+    note: "Loan amount, interest and tenure are decided by the lending institution, not by GramUdaan or MUDRA alone.",
   },
 
   {
@@ -304,7 +304,7 @@ export const governmentSchemes: GovernmentScheme[] = [
         weight: 10,
         check: () => "partial",
         partialReason: () =>
-          "PMEGP is for NEW (first-time) enterprises — RuralBiz assumes you are starting fresh; confirm your unit is not an existing or expanded business.",
+          "PMEGP is for NEW (first-time) enterprises — GramUdaan assumes you are starting fresh; confirm your unit is not an existing or expanded business.",
         passReason: () => "",
         failReason: () => "",
       },

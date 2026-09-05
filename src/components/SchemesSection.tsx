@@ -352,7 +352,7 @@ function SchemeDetailDialog({
           </p>
           <OfficialSourceLink url={s.officialSource.url} />
           <p className="mt-2 text-[11px] text-muted-foreground leading-relaxed">
-            <span className="font-semibold">Note: </span>{s.note} RuralBiz's match is preliminary — it is not an approval or an eligibility certificate.
+            <span className="font-semibold">Note: </span>{s.note} GramUdaan's match is preliminary — it is not an approval or an eligibility certificate.
           </p>
         </div>
 
@@ -468,9 +468,9 @@ export default function SchemesSection() {
       {/* Result count */}
       <p className="text-sm text-foreground mb-3">
         {relevantCount > 0 ? (
-          <>Based on your profile, RuralBiz found <span className="font-bold text-primary">{relevantCount} potentially relevant {relevantCount === 1 ? "program" : "programs"}</span> to investigate.</>
+          <>Based on your profile, GramUdaan found <span className="font-bold text-primary">{relevantCount} potentially relevant {relevantCount === 1 ? "program" : "programs"}</span> to investigate.</>
         ) : (
-          <>Based on the current profile, no scheme in RuralBiz's verified catalog shows a strong fit. The closest options are listed below — confirm any of them with the implementing authority.</>
+          <>Based on the current profile, no scheme in GramUdaan's verified catalog shows a strong fit. The closest options are listed below — confirm any of them with the implementing authority.</>
         )}
       </p>
 
@@ -525,13 +525,13 @@ export default function SchemesSection() {
           aria-expanded={showHow}
         >
           <HelpCircle className="h-3.5 w-3.5" />
-          How did RuralBiz match these schemes?
+          How did GramUdaan match these schemes?
           {showHow ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </button>
         {showHow && (
           <div className="mt-2 rounded-xl bg-muted/40 p-3.5 animate-fade-in">
             <p className="text-xs text-muted-foreground leading-relaxed">
-              RuralBiz compared your profile against each scheme's published scope using fixed, transparent rules. It considered:
+              GramUdaan compared your profile against each scheme's published scope using fixed, transparent rules. It considered:
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {["Business type", "Location (state)", "Project cost", "Your contribution", "Financing need"].map((k) => (
@@ -539,7 +539,7 @@ export default function SchemesSection() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground leading-relaxed">
-              Match % shows only the criteria RuralBiz could evaluate from the information you provided. Nothing here confirms eligibility — that is decided by the scheme's implementing authority.
+              Match % shows only the criteria GramUdaan could evaluate from the information you provided. Nothing here confirms eligibility — that is decided by the scheme's implementing authority.
             </p>
           </div>
         )}

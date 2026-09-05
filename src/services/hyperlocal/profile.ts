@@ -138,9 +138,9 @@ export interface HyperlocalMarketProfile {
 
 const SOURCES = [
   "India Post All-India pincode directory (location context)",
-  "RuralBiz estimated market model — reachable households, population & consumer estimates (calibrated demo baselines)",
-  "RuralBiz category-presence dataset — visible business counts (simulated for demonstration)",
-  "RuralBiz financial/scheme engine (project & funding values)",
+  "GramUdaan estimated market model — reachable households, population & consumer estimates (calibrated demo baselines)",
+  "GramUdaan category-presence dataset — visible business counts (simulated for demonstration)",
+  "GramUdaan financial/scheme engine (project & funding values)",
 ];
 
 const radiusBand = (r: number): string => {

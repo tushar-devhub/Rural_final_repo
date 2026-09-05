@@ -313,6 +313,93 @@ function buildWhatIfAnswer(lang: AdvisorLang, ctx: AdvisorContext, scenario: Sce
   return { text, followups: parts.length ? [applyMsg] : [] };
 }
 
+/* ── GramUdaan: transparent cost explanation ── */
+function buildCostAnswer(lang: AdvisorLang, f: FeasibilityData): string {
+  const br = f.costBreakdown;
+  if (!br) {
+    return pick(
+      lang,
+      "इस analysis में detailed cost breakdown उपलब्ध नहीं है।",
+      "Is analysis mein detailed cost breakdown available nahi hai.",
+      "A detailed cost breakdown isn't available for this analysis.",
+    );
+  }
+  const lines = br.components
+    .filter((c) => c.amount > 0)
+    .map((c) => `• ${c.label}: ${FULL(c.amount)} (${c.source.toLowerCase()})`);
+  const notes = br.notes.slice(0, 2).map((n) => `• ${n}`);
+  return pick(
+    lang,
+    `आपका estimated setup requirement ${FULL(br.total)} है। यह ऐसे बना है:\n\n${lines.join("\n")}\n\n${notes.length ? `${notes.join("\n")}\n\n` : ""}ये आंकड़े business type, आपकी place व्यवस्था (own/rent/buy) और scale के आधार पर estimates हैं। Actual cost local prices पर depend करेगी — ये कोई bank-approved figure नहीं है।`,
+    `Aapka estimated setup requirement ${FULL(br.total)} hai. Yeh aise bana hai:\n\n${lines.join("\n")}\n\n${notes.length ? `${notes.join("\n")}\n\n` : ""}Yeh figures business type, aapki place vyavastha (own/rent/buy) aur scale ke based estimates hain. Actual cost local prices par depend karegi — yeh koi bank-approved figure nahi hai.`,
+    `Your estimated setup requirement is ${FULL(br.total)}. Here is how it was built:\n\n${lines.join("\n")}\n\n${notes.length ? `${notes.join("\n")}\n\n` : ""}These figures are estimates based on your business type, place arrangement (own/rent/buy) and scale. Actual costs depend on local prices — this is not a bank-approved figure.`,
+  );
+}
+
+/* ── GramUdaan: profit timeline / loss-to-profit / break-even ── */
+function buildProfitTimelineAnswer(lang: AdvisorLang, f: FeasibilityData): string {
+  const pm = f.profitModel;
+  if (!pm) {
+    return pick(
+      lang,
+      "इस analysis में profit projection उपलब्ध नहीं है।",
+      "Is analysis mein profit projection available nahi hai.",
+      "A profit projection isn't available for this analysis.",
+    );
+  }
+  const firstProfit = pm.timeline.find((p) => p.profit >= 0);
+  const m1 = pm.timeline[0];
+  const m6 = pm.timeline[5];
+  const m12 = pm.timeline[11];
+  const row = (p: { label: string; revenue: number; expenses: number; profit: number }) =>
+    `${p.label}: revenue ${FULL(p.revenue)} − expenses ${FULL(p.expenses)} = ${p.profit >= 0 ? "profit" : "loss"} ${FULL(Math.abs(p.profit))}`;
+
+  return pick(
+    lang,
+    `Profit timeline (अनुमानित):\n\n• ${row(m1)}\n• ${row(m6)}\n• ${row(m12)}\n\n${firstProfit ? `Estimated operating profit पहली बार month ${firstProfit.month} (${firstProfit.label}) में दिख सकता है।` : "Estimated operating profit 12 महीनों में नहीं दिख रहा — scale, pricing या costs पर दोबारा विचार करें।"}${pm.breakEvenMonth ? ` Operating break-even करीब month ${pm.breakEvenMonth} (break-even sales ≈ ${FULL(pm.breakEvenSales)}/month) है।` : ""}\n\nये estimates हैं — actual results market और management पर depend करेंगे।`,
+    `Profit timeline (estimated):\n\n• ${row(m1)}\n• ${row(m6)}\n• ${row(m12)}\n\n${firstProfit ? `Estimated operating profit pehli baar month ${firstProfit.month} (${firstProfit.label}) mein dikh sakta hai.` : "Estimated operating profit 12 mahino mein nahi dikh raha — scale, pricing ya costs par dobara vichar karein."}${pm.breakEvenMonth ? ` Operating break-even karib month ${pm.breakEvenMonth} (break-even sales ≈ ${FULL(pm.breakEvenSales)}/month) hai.` : ""}\n\nYeh estimates hain — actual results market aur management par depend karenge.`,
+    `Profit timeline (estimated):\n\n• ${row(m1)}\n• ${row(m6)}\n• ${row(m12)}\n\n${firstProfit ? `Estimated operating profit could first appear around month ${firstProfit.month} (${firstProfit.label}).` : "Estimated operating profit does not appear within 12 months — revisit scale, pricing or costs."}${pm.breakEvenMonth ? ` Operating break-even is around month ${pm.breakEvenMonth} (break-even sales ≈ ${FULL(pm.breakEvenSales)}/month).` : ""}\n\nThese are estimates — actual results depend on the market and how the business is run.`,
+  );
+}
+
+/* ── GramUdaan: profit-based risk explanation ── */
+function buildProfitRiskAnswer(lang: AdvisorLang, f: FeasibilityData): string {
+  const pm = f.profitModel;
+  if (!pm) {
+    return pick(lang, "इस analysis में risk assessment उपलब्ध नहीं है।", "Is analysis mein risk assessment available nahi hai.", "A risk assessment isn't available for this analysis.");
+  }
+  const pos = pm.risk.reasons.positive.slice(0, 3);
+  const con = pm.risk.reasons.concerns.slice(0, 3);
+  return pick(
+    lang,
+    `आपके business का estimated risk: ${pm.risk.label.toUpperCase()}।\n\nकिस आधार पर?\n${pos.length ? `✓ ${pos.join("\n✓ ")}\n` : ""}${con.length ? `⚠ ${con.join("\n⚠ ")}` : ""}\n\nयह margin (${pm.profitMargin}%), break-even (${pm.breakEvenMonth ? `~month ${pm.breakEvenMonth}` : "9+ months"}), funding gap (${FULL(pm.capital.fundingGap)}) और competition पर आधारित estimate है।`,
+    `Aapke business ka estimated risk: ${pm.risk.label.toUpperCase()}.\n\nKis aadhar par?\n${pos.length ? `✓ ${pos.join("\n✓ ")}\n` : ""}${con.length ? `⚠ ${con.join("\n⚠ ")}` : ""}\n\nYeh margin (${pm.profitMargin}%), break-even (${pm.breakEvenMonth ? `~month ${pm.breakEvenMonth}` : "9+ months"}), funding gap (${FULL(pm.capital.fundingGap)}) aur competition par based estimate hai.`,
+    `Estimated risk for your business: ${pm.risk.label.toUpperCase()}.\n\nOn what basis?\n${pos.length ? `✓ ${pos.join("\n✓ ")}\n` : ""}${con.length ? `⚠ ${con.join("\n⚠ ")}` : ""}\n\nThis is estimated from your profit margin (${pm.profitMargin}%), break-even (${pm.breakEvenMonth ? `~month ${pm.breakEvenMonth}` : "9+ months"}), funding gap (${FULL(pm.capital.fundingGap)}) and competition.`,
+  );
+}
+
+/* ── GramUdaan: alternative businesses ── */
+function buildAlternativesAnswer(lang: AdvisorLang, f: FeasibilityData): string {
+  const alts = f.alternatives;
+  if (!alts || alts.length === 0) {
+    return pick(
+      lang,
+      "आपके profile के आधार पर अभी कोई मज़बूत alternative नहीं मिला।",
+      "Aapke profile ke based abhi koi mazboot alternative nahi mila.",
+      "No strong alternative was found based on your profile.",
+    );
+  }
+  const lines = alts.slice(0, 3).map(
+    (a, i) => `${i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"} ${a.icon} ${a.businessName} — fit ${a.fitScore}/100. ${a.reasons.slice(0, 2).join(" ")}`,
+  );
+  return pick(
+    lang,
+    `आपकी capital (${FULL(f.financial.availableContribution)}) और location के हिसाब से ये businesses तुलना के लायक हैं:\n\n${lines.join("\n\n")}\n\nRanking capital fit, estimated profit, risk और local feasibility पर आधारित है — यह guarantee नहीं है। Compare page पर पूरी तुलना देख सकते हैं।`,
+    `Aapki capital (${FULL(f.financial.availableContribution)}) aur location ke hisaab se yeh businesses tulna ke laayak hain:\n\n${lines.join("\n\n")}\n\nRanking capital fit, estimated profit, risk aur local feasibility par based hai — yeh guarantee nahi hai. Compare page par poori tulna dekh sakte hain.`,
+    `Based on your capital (${FULL(f.financial.availableContribution)}) and location, these businesses are worth comparing:\n\n${lines.join("\n\n")}\n\nThe ranking is based on capital fit, estimated profit, risk and local feasibility — it is not a guarantee. You can see the full comparison on the Compare page.`,
+  );
+}
+
 function buildScoreAnswer(lang: AdvisorLang, f: FeasibilityData): string {
   const s = f.subScores;
   const entries = [
@@ -741,9 +828,9 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
     return {
       text: pick(
         lang,
-        `नमस्ते! 🙏 मैं RuralBiz AI हूँ।${contextName ? ` ${contextName} का analysis मेरे पास है —` : ""} market, competition, risk, loan या scheme के बारे में पूछ सकते हैं।`,
-        `Namaste! 🙏 Main RuralBiz AI hoon.${contextName ? ` ${contextName} ka analysis mere paas hai —` : ""} market, competition, risk, loan ya scheme ke baare mein pooch sakte hain.`,
-        `Hello! 🙏 I'm RuralBiz AI.${contextName ? ` I have your ${contextName} analysis loaded —` : ""} ask me about market, competition, risks, loans or schemes.`,
+        `नमस्ते! 🙏 मैं GramUdaan हूँ।${contextName ? ` ${contextName} का analysis मेरे पास है —` : ""} market, competition, risk, loan या scheme के बारे में पूछ सकते हैं।`,
+        `Namaste! 🙏 Main GramUdaan hoon.${contextName ? ` ${contextName} ka analysis mere paas hai —` : ""} market, competition, risk, loan ya scheme ke baare mein pooch sakte hain.`,
+        `Hello! 🙏 I'm GramUdaan.${contextName ? ` I have your ${contextName} analysis loaded —` : ""} ask me about market, competition, risks, loans or schemes.`,
       ),
       followups: [],
     };
@@ -844,6 +931,23 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
   // Topic intents — answer from the actual scenario data
   const singleBusiness = businesses.length === 1 ? businesses[0] : null;
 
+  // GramUdaan: alternative businesses - "is se better business koi aur hai?",
+  // "better option", "kya koi aur business kar sakta hoon" - answered from the
+  // ranked alternatives computed from the user's actual capital + location.
+  if (
+    /(better business|behtar business|better option|alternative business|koi aur business|doosra business|dusra business|iske alawa|kya koi aur|any other business|what else|बेहतर|दूसरा business|और कौन सा)/.test(hint) &&
+    context.feasibility !== null
+  ) {
+    const sc = feasibilityForScenario(context, { business: singleBusiness, capital, location: mentionedLocation });
+    if (sc.feasibility) {
+      return {
+        text: buildAlternativesAnswer(lang, sc.feasibility),
+        followups: [pick(lang, "Compare page par dekho", "Compare page par dekho", "Open the compare page")],
+        suggestPage: "/compare",
+      };
+    }
+  }
+
   // Business recommendation — but when the user names a specific scheme
   // (MUDRA/PMEGP/scheme/yojana), the scheme intent below must take priority.
   const schemeMention = /(mudra|pmegp|scheme|subsidy|yojana|स्कीम|सरकारी|योजना|मुद्रा)/.test(hint);
@@ -899,6 +1003,45 @@ function computeReply(req: AdvisorRequest): AdvisorReply {
       text: pick(lang, "Loan estimate के लिए location, business और capital चाहिए।", "Loan estimate ke liye location, business aur capital chahiye.", "To estimate a loan I need your location, business and capital."),
       followups: [],
     };
+  }
+
+  // GramUdaan: transparent cost explanation - "cost itni kyu hai?",
+  // "ye cost kaisi aayi?", "paisa kahan kharch hoga?"
+  if (/(cost itni|cost kaisi|cost kyun|cost kaise|itni cost|itna paisa|paisa kahan|kahan kharch|kahan lagega|cost breakdown|setup cost|लागत|खर्च कहां|खर्चा|क्यों इतनी|कितना खर्च)/.test(hint)) {
+    const sc = feasibilityForScenario(context, { business: singleBusiness, capital, location: mentionedLocation });
+    if (sc.feasibility && sc.feasibility.costBreakdown) {
+      return {
+        text: buildCostAnswer(lang, sc.feasibility),
+        followups: [pick(lang, "Profit kab start hoga?", "Profit kab start hoga?", "When will profit start?")],
+        suggestPage: "/dashboard",
+      };
+    }
+  }
+
+  // GramUdaan: profit timeline / break-even - "profit kab start hoga?",
+  // "kab tak loss?", "break-even kab?"
+  if (/(profit kab|kab profit|profit kabse|profit kab se|loss kab|kab tak loss|kab tak nuksan|break.even|breakeven|munafa kab|nuksan kab|मुनाफा कब|नुकसान कब|कब तक)/.test(hint)) {
+    const sc = feasibilityForScenario(context, { business: singleBusiness, capital, location: mentionedLocation });
+    if (sc.feasibility && sc.feasibility.profitModel) {
+      return {
+        text: buildProfitTimelineAnswer(lang, sc.feasibility),
+        followups: [pick(lang, "Risk high kyu hai?", "Risk high kyun hai?", "Why is the risk high?")],
+        suggestPage: "/dashboard",
+      };
+    }
+  }
+
+  // GramUdaan: profit-based risk explanation - "risk kis basis par?",
+  // "risk high kyu hai?" (before the generic risk intent below)
+  if (/(risk kis|risk kyun|risk kyu|risk itna|risk high|khatra kis|khatra kyun|jokhim kyun|जोखिम क्यों|खतरा क्यों|risk basis)/.test(hint)) {
+    const sc = feasibilityForScenario(context, { business: singleBusiness, capital, location: mentionedLocation });
+    if (sc.feasibility && sc.feasibility.profitModel) {
+      return {
+        text: buildProfitRiskAnswer(lang, sc.feasibility),
+        followups: [pick(lang, "Kaunsa business mere liye better hai?", "Kaunsa business mere liye better hai?", "Which business is better for me?")],
+        suggestPage: "/dashboard",
+      };
+    }
   }
 
   // Score explanation

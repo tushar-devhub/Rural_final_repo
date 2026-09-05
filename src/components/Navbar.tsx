@@ -28,7 +28,7 @@ export function Navbar({ className, variant = "landing" }: NavbarProps) {
             <Globe className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="text-xl font-bold text-foreground font-sans-body tracking-tight">
-            Rural<span className="text-primary">Biz AI</span>
+            Gram<span className="text-primary">Udaan</span>
           </span>
         </Link>
 

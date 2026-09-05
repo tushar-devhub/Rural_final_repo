@@ -100,4 +100,67 @@ export interface FeasibilityData {
     summary: string;
   };
   nextSteps: string[];
+
+  /* ── GramUdaan additions (present when sub-category/place context exists) ── */
+  costBreakdown?: {
+    components: { id: string; label: string; labelHi: string; amount: number; source: string }[];
+    total: number;
+    monthlyRentEstimate: number;
+    notes: string[];
+  };
+  profitModel?: {
+    subCategoryName: string;
+    placeStatus: string;
+    monthlyRevenue: number;
+    monthlyFixedCosts: number;
+    monthlyVariableCosts: number;
+    monthlyExpenses: number;
+    monthlyProfit: number;
+    profitMargin: number;
+    timeline: { month: number; label: string; revenue: number; expenses: number; profit: number; cumulative: number }[];
+    breakEvenMonth: number | null;
+    breakEvenSales: number;
+    scales: {
+      id: string;
+      label: string;
+      labelHi: string;
+      investment: number;
+      revenue: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+      risk: "low" | "medium" | "high";
+      breakEvenMonth: number | null;
+      note: string;
+    }[];
+    capital: {
+      availableCapital: number;
+      requiredInvestment: number;
+      fundingGap: number;
+      remainingCapital: number;
+      allocationSuggestions: string[];
+    };
+    risk: {
+      level: "low" | "medium" | "high";
+      label: string;
+      reasons: { positive: string[]; concerns: string[] };
+    };
+    assumptions: string[];
+  };
+  alternatives?: {
+    businessId: string;
+    businessName: string;
+    icon: string;
+    subCategoryName: string;
+    requiredInvestment: number;
+    fundingGap: number;
+    monthlyRevenue: number;
+    monthlyProfit: number;
+    margin: number;
+    risk: "low" | "medium" | "high";
+    breakEvenMonth: number | null;
+    feasibilityScore: number;
+    fitScore: number;
+    reasons: string[];
+  }[];
 }

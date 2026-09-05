@@ -9,7 +9,7 @@ export default function NotFound() {
         <h1 className="text-2xl font-bold text-foreground">Page Not Found</h1>
         <p className="text-sm text-muted-foreground mt-2 max-w-sm mx-auto">
           The page you are looking for does not exist or has been moved. You can head
-          back to the RuralBiz AI homepage to get started.
+          back to the GramUdaan homepage to get started.
         </p>
         <Link
           to="/"

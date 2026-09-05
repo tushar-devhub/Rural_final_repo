@@ -122,7 +122,7 @@ export function VoiceAssistant() {
     return () => window.clearInterval(id);
   }, [appState]);
 
-  // ─── Send message through the real RuralBiz advisor engine ───
+  // ─── Send message through the real GramUdaan advisor engine ───
   const sendMessage = useCallback(async (raw: string, isVoice = false) => {
     const text = raw.trim();
     if (!text || busyRef.current) return;
@@ -402,7 +402,7 @@ export function VoiceAssistant() {
         <button
           onClick={openPanel}
           className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-3.5 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/25 hover:-translate-y-0.5 transition-all duration-200"
-          aria-label="Open RuralBiz AI Voice Advisor"
+          aria-label="Open GramUdaan Voice Advisor"
         >
           <Bot className="h-5 w-5" />
           <span className="text-sm font-semibold hidden sm:inline">AI Advisor</span>
@@ -416,7 +416,7 @@ export function VoiceAssistant() {
           <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={handleClose} />
           <div
             role="dialog"
-            aria-label="RuralBiz AI Advisor conversation"
+            aria-label="GramUdaan AI Advisor conversation"
             className="fixed z-50 bg-white border border-border shadow-2xl flex flex-col animate-slide-up inset-0 sm:inset-auto sm:bottom-6 sm:right-6 sm:w-[420px] sm:h-[620px] sm:rounded-2xl"
           >
             {/* Header */}
@@ -425,7 +425,7 @@ export function VoiceAssistant() {
                 <Bot className="h-5 w-5 text-primary" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-bold text-foreground font-serif-display">RuralBiz AI Advisor</h3>
+                <h3 className="text-sm font-bold text-foreground font-serif-display">GramUdaan AI Advisor</h3>
                 <div className="flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   <p className="text-[11px] text-muted-foreground truncate">
@@ -476,7 +476,7 @@ export function VoiceAssistant() {
                   </div>
                   <p className="text-sm font-bold text-foreground mb-1">नमस्ते! 🙏</p>
                   <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                    मैं RuralBiz AI हूँ। मैं आपके business analysis को समझता हूँ — बोलिए या लिखिए, और मैं असली analysis data से जवाब दूँगा।
+                    मैं GramUdaan हूँ। मैं आपके business analysis को समझता हूँ — बोलिए या लिखिए, और मैं असली analysis data से जवाब दूँगा।
                   </p>
                   {feasibility ? (
                     <div className="mt-3 inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1.5">

@@ -144,7 +144,7 @@ export default function Advisor() {
           </div>
           <div className="mt-2 rounded-xl border border-border/70 bg-white px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
             🎤 बोलकर पूछने के लिए नीचे दाएँ <Mic className="inline h-3 w-3" /> button दबाएँ — यहाँ लिखकर भी पूछ सकते हैं (Hindi / Hinglish / English)।
-            सभी जवाब आपके current RuralBiz analysis और financial engine से निकलते हैं।
+            सभी जवाब आपके current GramUdaan analysis और financial engine से निकलते हैं।
           </div>
         </div>
 

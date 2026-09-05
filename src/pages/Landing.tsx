@@ -178,20 +178,20 @@ function HowItWorks() {
     },
     {
       num: "02",
-      title: "Tell Us Your Business",
-      desc: "Choose from 12+ business categories or describe your own idea.",
+      title: "Pick Your Business & Type",
+      desc: "Choose from 12+ business categories, then the exact type — dairy farming, kirana, repair shop and more.",
       icon: <Store className="h-5 w-5" />,
     },
     {
       num: "03",
-      title: "Enter Your Capital",
-      desc: "Share how much you can contribute from your own savings.",
+      title: "Tell Us Your Place & Capital",
+      desc: "Do you already own a shop or land? How much can you contribute? Costs adjust automatically.",
       icon: <IndianRupee className="h-5 w-5" />,
     },
     {
       num: "04",
       title: "Get Your Decision",
-      desc: "Receive a complete feasibility analysis with a clear recommendation.",
+      desc: "Full feasibility with transparent costs, profit timeline, break-even, risk and better alternatives.",
       icon: <BarChart3 className="h-5 w-5" />,
     },
   ];
@@ -364,7 +364,7 @@ function FinancialPlanning() {
               for Your Business
             </h2>
             <p className="mt-4 text-muted-foreground leading-relaxed">
-              From your initial savings to government loan schemes, RuralBiz AI
+              From your initial savings to government loan schemes, GramUdaan
               helps you understand every rupee before you invest. No surprises, no
               guesswork — just clarity.
             </p>
@@ -414,7 +414,7 @@ function TrustSection() {
             Trusted & <span className="italic text-primary">Transparent</span>
           </h2>
           <p className="mt-4 text-muted-foreground leading-relaxed text-sm sm:text-base">
-            RuralBiz AI provides recommendations based on available data, market
+            GramUdaan provides recommendations based on available data, market
             estimates and defined rules. We clearly label what is verified data,
             what is estimated, and what is AI-generated insight. Always verify
             critical financial and regulatory information before making investment
@@ -556,7 +556,7 @@ function DemoMode() {
             Demo <span className="italic text-primary">Scenarios</span>
           </h2>
           <p className="mt-3 text-muted-foreground text-sm sm:text-base">
-            Explore preset scenarios to see how RuralBiz AI works. Each demonstrates a different aspect of the analysis.
+            Explore preset scenarios to see how GramUdaan works. Each demonstrates a different aspect of the analysis.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

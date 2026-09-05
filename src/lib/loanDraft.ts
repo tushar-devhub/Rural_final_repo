@@ -138,9 +138,9 @@ function inr(n: number): string {
 // ─── Deterministic text generators (grounded in the analysis) ───
 
 function buildPurpose(a: LoanAnchors, scheme: GovernmentScheme | null): string {
-  const base = `The applicant proposes to establish a ${a.businessName.toLowerCase()} business in ${a.locationName}, ${a.district}, ${a.state}, and seeks financing of approximately Rs. ${inr(Math.round(a.fundingRequirement))} to support the project setup and working-capital requirements analysed by RuralBiz.`;
+  const base = `The applicant proposes to establish a ${a.businessName.toLowerCase()} business in ${a.locationName}, ${a.district}, ${a.state}, and seeks financing of approximately Rs. ${inr(Math.round(a.fundingRequirement))} to support the project setup and working-capital requirements analysed by GramUdaan.`;
   if (scheme) {
-    return `${base} ${scheme.name} is being explored as a potentially relevant financing option based on RuralBiz's preliminary scheme matching.`;
+    return `${base} ${scheme.name} is being explored as a potentially relevant financing option based on GramUdaan's preliminary scheme matching.`;
   }
   return base;
 }
@@ -153,35 +153,35 @@ function buildJustification(a: LoanAnchors, feasibility: FeasibilityData): strin
   const f = feasibility.financial;
   const parts: string[] = [];
   parts.push(
-    `RuralBiz's feasibility analysis for ${a.businessName} in ${a.locationName} (${a.district}, ${a.state}) estimates an overall score of ${feasibility.overallScore}/100 (${feasibility.verdictLabel}).`,
+    `GramUdaan's feasibility analysis for ${a.businessName} in ${a.locationName} (${a.district}, ${a.state}) estimates an overall score of ${feasibility.overallScore}/100 (${feasibility.verdictLabel}).`,
   );
   if (m?.potentialCustomers != null) {
     parts.push(
-      `The estimated local customer base within the analysis area is approximately ${inr(Math.round(m.potentialCustomers))} people (RuralBiz estimate).`,
+      `The estimated local customer base within the analysis area is approximately ${inr(Math.round(m.potentialCustomers))} people (GramUdaan estimate).`,
     );
   }
   if (o?.summary) parts.push(`Opportunity: ${o.summary}`);
   if (o?.underserved) parts.push(`Underserved need identified: ${o.underserved}.`);
   if (c?.summary) parts.push(`Competition: ${c.summary}.`);
-  if (p?.recommendedPrice) parts.push(`Pricing: RuralBiz suggests a recommended price of ${p.recommendedPrice}${p.unit ? ` per ${p.unit}` : ""}, within the observed regional range (${p.competitorRange ?? "not available"}).`);
+  if (p?.recommendedPrice) parts.push(`Pricing: GramUdaan suggests a recommended price of ${p.recommendedPrice}${p.unit ? ` per ${p.unit}` : ""}, within the observed regional range (${p.competitorRange ?? "not available"}).`);
   if (f?.affordability?.ratingLabel) {
-    parts.push(`Financial fit: the projected cash flow is rated "${f.affordability.ratingLabel}" by RuralBiz's affordability model (estimated).`);
+    parts.push(`Financial fit: the projected cash flow is rated "${f.affordability.ratingLabel}" by GramUdaan's affordability model (estimated).`);
   }
   parts.push(
-    "These figures are RuralBiz estimates based on simulated market data and the applicant's stated contribution; they are not guarantees of revenue, profit or loan approval.",
+    "These figures are GramUdaan estimates based on simulated market data and the applicant's stated contribution; they are not guarantees of revenue, profit or loan approval.",
   );
   return parts.join(" ");
 }
 
 function buildCustomerGroups(feasibility: FeasibilityData): string {
   const g = feasibility.marketReach?.customerGroups;
-  return g && g.length > 0 ? g.join(", ") : "Local households and nearby villages (as per RuralBiz market reach analysis)";
+  return g && g.length > 0 ? g.join(", ") : "Local households and nearby villages (as per GramUdaan market reach analysis)";
 }
 
 function buildOpportunity(feasibility: FeasibilityData): string {
   return (
     feasibility.opportunity?.summary ??
-    "Local demand for this service/product appears underserved based on RuralBiz's analysis (estimated)."
+    "Local demand for this service/product appears underserved based on GramUdaan's analysis (estimated)."
   );
 }
 
@@ -192,11 +192,11 @@ function buildCompetition(feasibility: FeasibilityData): string {
 
 function buildPricing(feasibility: FeasibilityData): string {
   const p = feasibility.pricing;
-  return p?.explanation ?? (p?.recommendedPrice ? `Recommended price ${p.recommendedPrice} (RuralBiz estimate).` : "Pricing rationale not available.");
+  return p?.explanation ?? (p?.recommendedPrice ? `Recommended price ${p.recommendedPrice} (GramUdaan estimate).` : "Pricing rationale not available.");
 }
 
 function buildProjectDescription(a: LoanAnchors): string {
-  return `Establishment of a ${a.businessName.toLowerCase()} enterprise in ${a.locationName}, ${a.district}, ${a.state} as analysed by RuralBiz.`;
+  return `Establishment of a ${a.businessName.toLowerCase()} enterprise in ${a.locationName}, ${a.district}, ${a.state} as analysed by GramUdaan.`;
 }
 
 // ─── Documents checklist (base + scheme-aware) ───
@@ -285,7 +285,7 @@ export function createDraft(input: DraftInput): LoanDraft | null {
 export function regenerateText(draft: LoanDraft, feasibility: FeasibilityData): LoanDraft {
   const scheme = schemeById(draft.schemeId);
   const purpose = draft.project.purpose.startsWith("The applicant proposes") ? "" : draft.project.purpose;
-  const justification = draft.market.justification.startsWith("RuralBiz's feasibility") ? "" : draft.market.justification;
+  const justification = draft.market.justification.startsWith("GramUdaan's feasibility") ? "" : draft.market.justification;
   return {
     ...draft,
     meta: { ...draft.meta, updatedAt: new Date().toISOString() },
@@ -422,7 +422,7 @@ export function renderDraftText(d: LoanDraft): string {
   L.push(`Funding requirement (calculated): Rs. ${d.financial.fundingRequirement.toLocaleString("en-IN")}`);
   L.push(`Proposed loan amount: Rs. ${d.financial.proposedLoan.toLocaleString("en-IN")}`);
   L.push(`Other sources: ${d.financial.otherSources || "None stated"}`);
-  sec("Business Projections (RuralBiz estimate)");
+  sec("Business Projections (GramUdaan estimate)");
   L.push(`Expected monthly revenue: Rs. ${d.financial.monthlyRevenue.toLocaleString("en-IN")}`);
   L.push(`Estimated monthly expenses: Rs. ${d.financial.monthlyExpenses.toLocaleString("en-IN")}`);
   L.push(`Estimated monthly surplus: Rs. ${d.financial.monthlyProfit.toLocaleString("en-IN")}`);
@@ -447,7 +447,7 @@ export function renderDraftText(d: LoanDraft): string {
   docs.forEach((x) => L.push(`- ${x}`));
   L.push("Final document requirements are determined by the concerned bank/authority.");
   L.push("");
-  L.push("DISCLAIMER: Prepared with RuralBiz AI. This document is an AI-generated application draft for preparation purposes. Final application format, eligibility, documentation, loan amount, interest rate and approval are determined by the concerned bank/financial institution or implementing authority.");
+  L.push("DISCLAIMER: Prepared with GramUdaan. This document is an AI-generated application draft for preparation purposes. Final application format, eligibility, documentation, loan amount, interest rate and approval are determined by the concerned bank/financial institution or implementing authority.");
   return L.join("\n");
 }
 

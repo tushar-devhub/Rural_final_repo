@@ -70,7 +70,7 @@ function getClientSideResponse(messages: AIMessage[]): AIResponse {
   // Greeting
   if (lowerMsg.includes("namaste") || lowerMsg.includes("hello") || lowerMsg.includes("hi") || lowerMsg.includes("नमस्ते")) {
     return {
-      text: `नमस्ते! मैं RuralBiz AI हूँ। मैं आपके ${business} analysis को समझ चुका हूँ। आप मुझसे अपने business, market, competition या finance से जुड़ा कोई भी सवाल पूछ सकते हैं।`,
+      text: `नमस्ते! मैं GramUdaan हूँ। मैं आपके ${business} analysis को समझ चुका हूँ। आप मुझसे अपने business, market, competition या finance से जुड़ा कोई भी सवाल पूछ सकते हैं।`,
     };
   }
 

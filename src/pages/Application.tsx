@@ -227,7 +227,7 @@ export default function Application() {
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-foreground font-serif-display">Loan Application Draft</h1>
-              <p className="text-xs text-muted-foreground">AI-generated from your RuralBiz analysis — review before submission</p>
+              <p className="text-xs text-muted-foreground">AI-generated from your GramUdaan analysis — review before submission</p>
             </div>
           </div>
           <div className="sm:ml-auto flex items-center gap-2 flex-wrap">
@@ -279,7 +279,7 @@ export default function Application() {
               <div>
                 <p className="text-xs font-bold text-foreground">Potential financing option explored: {anchoredScheme.name}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Selected from RuralBiz's preliminary scheme matching{schemeMatch ? ` — ${schemeMatch.level.toUpperCase()} match` : ""}. Not an approval or eligibility certificate.
+                  Selected from GramUdaan's preliminary scheme matching{schemeMatch ? ` — ${schemeMatch.level.toUpperCase()} match` : ""}. Not an approval or eligibility certificate.
                 </p>
               </div>
             </div>
@@ -501,7 +501,7 @@ export default function Application() {
               <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
                 <input type="checkbox" checked={draft.includeBusinessPlan} onChange={(e) => update((d) => ({ ...d, includeBusinessPlan: e.target.checked }))} className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary" />
                 <span>
-                  Include a note that your RuralBiz Business Plan (decision report) can be attached where the institution accepts supporting documents.
+                  Include a note that your GramUdaan Business Plan (decision report) can be attached where the institution accepts supporting documents.
                 </span>
               </label>
               <Link to="/report" className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors w-fit">
@@ -528,7 +528,7 @@ export default function Application() {
             <div className="rounded-2xl border border-border bg-white overflow-hidden shadow-sm">
               {/* Doc header */}
               <div className="bg-[#174f38] px-5 sm:px-8 py-5 text-white">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-white/70">RuralBiz AI</p>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-white/70">GramUdaan</p>
                 <h2 className="mt-1 text-lg sm:text-xl font-bold font-serif-display">Loan Application Draft</h2>
                 <p className="text-xs text-white/75 mt-0.5">AI-generated draft for preparation purposes — not an official bank or government form</p>
               </div>
@@ -571,7 +571,7 @@ export default function Application() {
                     </table>
                   </div>
                   <p className="mt-2 text-[11px] text-muted-foreground">Funding requirement is calculated as Project cost − Own contribution.</p>
-                  <DocHeading n="5">Business Projections (RuralBiz estimate)</DocHeading>
+                  <DocHeading n="5">Business Projections (GramUdaan estimate)</DocHeading>
                   <div className="overflow-hidden rounded-xl border border-border">
                     <table className="w-full text-sm">
                       <tbody className="divide-y divide-border/60">
@@ -581,7 +581,7 @@ export default function Application() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-2 text-[11px] text-muted-foreground">RuralBiz estimates — actual figures depend on market conditions and business execution.</p>
+                  <p className="mt-2 text-[11px] text-muted-foreground">GramUdaan estimates — actual figures depend on market conditions and business execution.</p>
                 </div>
                 <div className="border-t border-dashed border-border pt-4">
                   <DocHeading n="6">Market Overview</DocHeading>
@@ -606,7 +606,7 @@ export default function Application() {
                     <p className="text-muted-foreground leading-relaxed">No specific scheme was selected — review "Government Schemes & Financing" on your dashboard for potentially relevant options.</p>
                   )}
                   {draft.includeBusinessPlan && (
-                    <p className="mt-2 text-[11px] text-muted-foreground">• A RuralBiz Business Plan (business decision report) is available and may be attached where the institution accepts supporting documents.</p>
+                    <p className="mt-2 text-[11px] text-muted-foreground">• A GramUdaan Business Plan (business decision report) is available and may be attached where the institution accepts supporting documents.</p>
                   )}
                 </div>
                 <div className="border-t border-dashed border-border pt-4">
@@ -630,7 +630,7 @@ export default function Application() {
                 <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5">
                   <ShieldAlert className="h-4 w-4 flex-shrink-0 text-amber-600 mt-0.5" />
                   <p className="text-[11px] text-amber-800 leading-relaxed">
-                    Prepared with RuralBiz AI. This document is an AI-generated application draft for preparation purposes. Final application format, eligibility, documentation, loan amount, interest rate and approval are determined by the concerned bank/financial institution or implementing authority. This is not an official application form and does not confirm eligibility, subsidy or loan approval.
+                    Prepared with GramUdaan. This document is an AI-generated application draft for preparation purposes. Final application format, eligibility, documentation, loan amount, interest rate and approval are determined by the concerned bank/financial institution or implementing authority. This is not an official application form and does not confirm eligibility, subsidy or loan approval.
                   </p>
                 </div>
               </div>

@@ -3,14 +3,28 @@ import type { Location } from "@/data/locations";
 import type { BusinessCategory } from "@/data/businesses";
 import type { FeasibilityData } from "@/data/feasibility-types";
 import type { DemoScenario } from "@/data/demos";
+import type { PlaceStatus, ScaleChoice, BusinessSubCategory } from "@/data/businessConfig";
 import { locations } from "@/data/locations";
 import { businessCategories } from "@/data/businesses";
 import { generateFeasibility } from "@/data/feasibility";
+
+export interface FeasibilityOptions {
+  subCategoryId?: string | null;
+  placeStatus?: PlaceStatus;
+  rentMonthly?: number;
+  scaleChoice?: ScaleChoice;
+  businessAnswers?: Record<string, string>;
+}
 
 interface OnboardingState {
   location: Location | null;
   radius: number;
   business: BusinessCategory | null;
+  subCategory: BusinessSubCategory | null;
+  placeStatus: PlaceStatus;
+  rentMonthly: number;
+  scaleChoice: ScaleChoice;
+  businessAnswers: Record<string, string>;
   capital: number;
   feasibility: FeasibilityData | null;
   isAnalyzing: boolean;
@@ -20,6 +34,11 @@ interface OnboardingContextType extends OnboardingState {
   setLocation: (loc: Location | null) => void;
   setRadius: (r: number) => void;
   setBusiness: (biz: BusinessCategory | null) => void;
+  setSubCategory: (s: BusinessSubCategory | null) => void;
+  setPlaceStatus: (p: PlaceStatus) => void;
+  setRentMonthly: (r: number) => void;
+  setScaleChoice: (s: ScaleChoice) => void;
+  setBusinessAnswer: (id: string, value: string) => void;
   setCapital: (c: number) => void;
   setFeasibility: (f: FeasibilityData | null) => void;
   setIsAnalyzing: (a: boolean) => void;
@@ -31,6 +50,11 @@ const defaultState: OnboardingState = {
   location: null,
   radius: 5,
   business: null,
+  subCategory: null,
+  placeStatus: "unsure",
+  rentMonthly: 0,
+  scaleChoice: "recommended",
+  businessAnswers: {},
   capital: 0,
   feasibility: null,
   isAnalyzing: false,
@@ -46,7 +70,17 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const setRadius = (radius: number) =>
     setState((s) => ({ ...s, radius }));
   const setBusiness = (business: BusinessCategory | null) =>
-    setState((s) => ({ ...s, business }));
+    setState((s) => ({ ...s, business, subCategory: null }));
+  const setSubCategory = (subCategory: BusinessSubCategory | null) =>
+    setState((s) => ({ ...s, subCategory }));
+  const setPlaceStatus = (placeStatus: PlaceStatus) =>
+    setState((s) => ({ ...s, placeStatus }));
+  const setRentMonthly = (rentMonthly: number) =>
+    setState((s) => ({ ...s, rentMonthly }));
+  const setScaleChoice = (scaleChoice: ScaleChoice) =>
+    setState((s) => ({ ...s, scaleChoice }));
+  const setBusinessAnswer = (id: string, value: string) =>
+    setState((s) => ({ ...s, businessAnswers: { ...s.businessAnswers, [id]: value } }));
   const setCapital = (capital: number) =>
     setState((s) => ({ ...s, capital }));
   const setFeasibility = (feasibility: FeasibilityData | null) =>
@@ -63,6 +97,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       location: loc,
       radius: 5,
       business: biz,
+      subCategory: null,
+      placeStatus: "unsure",
+      rentMonthly: 0,
+      scaleChoice: "recommended",
+      businessAnswers: {},
       capital: demo.capital,
       feasibility,
       isAnalyzing: false,
@@ -76,6 +115,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         setLocation,
         setRadius,
         setBusiness,
+        setSubCategory,
+        setPlaceStatus,
+        setRentMonthly,
+        setScaleChoice,
+        setBusinessAnswer,
         setCapital,
         setFeasibility,
         setIsAnalyzing,
@@ -93,6 +137,11 @@ const defaultContextValue: OnboardingContextType = {
   setLocation: () => {},
   setRadius: () => {},
   setBusiness: () => {},
+  setSubCategory: () => {},
+  setPlaceStatus: () => {},
+  setRentMonthly: () => {},
+  setScaleChoice: () => {},
+  setBusinessAnswer: () => {},
   setCapital: () => {},
   setFeasibility: () => {},
   setIsAnalyzing: () => {},

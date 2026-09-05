@@ -170,7 +170,7 @@ export function matchSchemesForProfile(profile: SchemeProfileInput): SchemeMatch
 }
 
 /* ─── Convenience builder from app state ───
- * Builds the SchemeProfileInput from the shared RuralBiz context values so the
+ * Builds the SchemeProfileInput from the shared GramUdaan context values so the
  * dashboard/report/advisor all feed the SAME numbers the feasibility engine
  * produced (single source of truth).
  */

@@ -11,6 +11,11 @@ import { formatIndianCurrency } from "@/data/assessment";
 import { getRecommendations } from "@/data/recommendations";
 import IndiaMap from "@/components/IndiaMap";
 import {
+  getSubCategoriesForBusiness, getSubCategory,
+  PLACE_STATUS_OPTIONS, SCALE_OPTIONS, SCALE_FACTORS,
+  type BusinessSubCategory, type PlaceStatus, type ScaleChoice,
+} from "@/data/businessConfig";
+import {
   initLocationService, searchLocations, searchPinOnline, suggestLocations, curatedSuggestions, nearestLocations, registerHit,
   getDetailState, type DetailLoadState,
   getLoadState, type LocationHit, type GeoLoadState,
@@ -21,14 +26,17 @@ import {
   MapPin, Search, Store, Lightbulb, IndianRupee,
   CheckCircle2, ArrowLeft, ArrowRight, Edit3, Check,
   TrendingUp, X, Loader2, Sparkles, Navigation, Database, AlertCircle, RotateCcw,
+  Home, Building2, Hammer, Warehouse, KeyRound, HelpCircle, SlidersHorizontal, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
   { id: 0, label: "Location" },
   { id: 1, label: "Business" },
-  { id: 2, label: "Capital" },
-  { id: 3, label: "Review" },
+  { id: 2, label: "Business Type" },
+  { id: 3, label: "Place" },
+  { id: 4, label: "Capital" },
+  { id: 5, label: "Review" },
 ];
 
 const QUICK_AMOUNTS = [
@@ -48,6 +56,9 @@ function OnboardingInner() {
   const {
     location, setLocation, radius, setRadius,
     business, setBusiness, capital, setCapital,
+    subCategory, setSubCategory, placeStatus, setPlaceStatus,
+    rentMonthly, setRentMonthly, scaleChoice, setScaleChoice,
+    businessAnswers, setBusinessAnswer,
     setFeasibility, isAnalyzing, setIsAnalyzing,
   } = useOnboarding();
 
@@ -68,11 +79,13 @@ function OnboardingInner() {
     switch (step) {
       case 0: return location !== null;
       case 1: return business !== null;
-      case 2: return capital > 0;
+      case 2: return subCategory !== null;
       case 3: return true;
+      case 4: return capital > 0;
+      case 5: return true;
       default: return false;
     }
-  }, [step, location, business, capital]);
+  }, [step, location, business, subCategory, capital]);
 
   const transitionTo = useCallback(async (targetStep: number, text: string) => {
     setTransitionText(text);
@@ -83,12 +96,18 @@ function OnboardingInner() {
   }, []);
 
   const handleNext = useCallback(() => {
-    if (step === 2 && capital <= 0) {
+    if (step === 4 && capital <= 0) {
       setCapitalError("Please enter a valid amount");
       return;
     }
-    if (step < 3) {
-      const texts = ["Looking up market data...", "Preparing business categories...", "Reviewing your selections..."];
+    if (step < 5) {
+      const texts = [
+        "Looking up market data...",
+        "Preparing business categories...",
+        "Loading business types...",
+        "Checking your workspace...",
+        "Reviewing your selections...",
+      ];
       transitionTo(step + 1, texts[step] || "Loading...");
     }
   }, [step, capital, transitionTo]);
@@ -104,7 +123,12 @@ function OnboardingInner() {
     setIsAnalyzing(true);
     try {
       const startedAt = Date.now();
-      const feasibility = generateFeasibility(business.id, capital, location.id, radius);
+      const feasibility = generateFeasibility(business.id, capital, location.id, radius, {
+        subCategoryId: subCategory?.id ?? null,
+        placeStatus,
+        rentMonthly,
+        scaleChoice,
+      });
       // The calculation itself is fast — hold the polished branded loader
       // for a short minimum so there is no abrupt flash into the dashboard.
       const elapsed = Date.now() - startedAt;
@@ -122,7 +146,7 @@ function OnboardingInner() {
       analyzeBusyRef.current = false;
       setAnalyzeError(true);
     }
-  }, [business, location, capital, radius, navigate, setFeasibility, setIsAnalyzing]);
+  }, [business, location, capital, radius, subCategory, placeStatus, rentMonthly, scaleChoice, navigate, setFeasibility, setIsAnalyzing]);
 
   if (analyzeError) {
     return (
@@ -175,7 +199,7 @@ function OnboardingInner() {
       {/* Simplified onboarding header */}
       <div className="border-b border-border/50 bg-white">
         <div className="mx-auto max-w-2xl px-4 py-3 flex items-center justify-between">
-          <span className="text-sm font-bold text-primary font-serif-display">RuralBiz AI</span>
+          <span className="text-sm font-bold text-primary font-serif-display">GramUdaan</span>
           <button onClick={() => navigate("/")} className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-3.5 w-3.5" />
             Exit
@@ -203,13 +227,40 @@ function OnboardingInner() {
             />
           )}
           {step === 2 && (
-            <CapitalStep value={capital} business={business} onChange={(v) => { setCapital(v); setCapitalError(""); }} error={capitalError} />
+            <SubCategoryStep
+              business={business}
+              selected={subCategory}
+              onSelect={setSubCategory}
+              answers={businessAnswers}
+              onAnswer={setBusinessAnswer}
+            />
           )}
           {step === 3 && (
+            <PlaceStep
+              business={business}
+              subCategory={subCategory}
+              status={placeStatus}
+              onStatusChange={setPlaceStatus}
+              rentMonthly={rentMonthly}
+              onRentChange={setRentMonthly}
+            />
+          )}
+          {step === 4 && (
+            <CapitalStep
+              value={capital} business={business}
+              subCategory={subCategory} placeStatus={placeStatus}
+              rentMonthly={rentMonthly} scaleChoice={scaleChoice}
+              onChange={(v) => { setCapital(v); setCapitalError(""); }} error={capitalError}
+            />
+          )}
+          {step === 5 && (
             <ReviewStep location={location} radius={radius} business={business} capital={capital}
+              subCategory={subCategory} placeStatus={placeStatus} rentMonthly={rentMonthly} scaleChoice={scaleChoice}
               onEditLocation={() => transitionTo(0, "Going to location...")}
               onEditBusiness={() => transitionTo(1, "Going to business...")}
-              onEditCapital={() => transitionTo(2, "Going to capital...")}
+              onEditType={() => transitionTo(2, "Going to business type...")}
+              onEditPlace={() => transitionTo(3, "Going to place...")}
+              onEditCapital={() => transitionTo(4, "Going to capital...")}
             />
           )}
         </div>
@@ -826,9 +877,194 @@ function BusinessStep({ search, onSearchChange, businesses, selected, onSelect, 
   );
 }
 
-/* ─── Step 3: Capital with dynamic financing preview ─── */
-function CapitalStep({ value, business, onChange, error }: {
+/* ─── Step 2b: Business Type (sub-category) + scale ─── */
+function SubCategoryStep({ business, selected, onSelect, answers, onAnswer }: {
+  business: BusinessCategory | null;
+  selected: BusinessSubCategory | null;
+  onSelect: (s: BusinessSubCategory | null) => void;
+  answers: Record<string, string>;
+  onAnswer: (id: string, value: string) => void;
+}) {
+  const options = useMemo(() => (business ? getSubCategoriesForBusiness(business.id) : []), [business]);
+
+  return (
+    <div className="animate-fade-in">
+      <div className="text-center mb-8">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
+          <SlidersHorizontal className="h-6 w-6" />
+        </div>
+        <h2 className="text-2xl sm:text-3xl font-bold">What exactly are you planning?</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {business ? <>For <span className="font-semibold text-foreground">{business.icon} {business.name}</span> — pick the specific type. This changes the cost and revenue estimates.</> : "Pick the specific type of business"}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        {options.map((opt) => (
+          <button key={opt.id} onClick={() => onSelect(opt)}
+            className={cn(
+              "flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+              selected?.id === opt.id
+                ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20"
+                : "border-border bg-white hover:border-primary/40 hover:shadow-md",
+            )}>
+            <span className="text-2xl flex-shrink-0">{opt.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-foreground">{opt.name}</p>
+                {selected?.id === opt.id && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{opt.description}</p>
+              <p className="text-[10px] text-primary/70 mt-1">की आवश्यकता: {opt.nameHi}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Business-specific questions for the chosen sub-category */}
+      {selected && selected.questions.length > 0 && (
+        <div className="rounded-xl border border-border bg-[#F4F8EF] p-4 mb-6 animate-fade-in">
+          <p className="text-sm font-bold text-foreground mb-1">A few quick questions</p>
+          <p className="text-xs text-muted-foreground mb-4">These help us fine-tune the estimate for your plan.</p>
+          <div className="space-y-4">
+            {selected.questions.map((q) => (
+              <div key={q.id}>
+                <p className="text-sm font-semibold text-foreground mb-2">{q.label}</p>
+                {q.options ? (
+                  <div className="flex flex-wrap gap-2">
+                    {q.options.map((o) => (
+                      <button key={o.value} onClick={() => onAnswer(q.id, o.value)}
+                        className={cn("rounded-full border px-4 py-2 text-xs font-semibold transition-all",
+                          answers[q.id] === o.value
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-white text-muted-foreground hover:border-primary/40",
+                        )}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={answers[q.id] || ""}
+                    onChange={(e) => onAnswer(q.id, e.target.value)}
+                    placeholder={q.placeholder || q.label}
+                    className="w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Step 3: Place / Workspace (ownership-aware costing) ─── */
+const PLACE_ICONS: Record<PlaceStatus, React.ReactNode> = {
+  own: <Home className="h-5 w-5" />,
+  rent: <KeyRound className="h-5 w-5" />,
+  buy: <Building2 className="h-5 w-5" />,
+  build: <Hammer className="h-5 w-5" />,
+  "not-needed": <Warehouse className="h-5 w-5" />,
+  unsure: <HelpCircle className="h-5 w-5" />,
+};
+
+const PLACE_LABELS: Record<PlaceStatus, string> = {
+  own: "I already have it",
+  rent: "I will rent",
+  buy: "I will buy",
+  build: "I will build / construct",
+  "not-needed": "No separate place needed",
+  unsure: "Not sure yet",
+};
+
+const PLACE_TYPE_LABEL: Record<string, string> = {
+  shop: "a shop",
+  land: "land / shed",
+  workspace: "a workspace / shed",
+  shed: "a shed",
+  none: "no separate place",
+};
+
+function PlaceStep({ business, subCategory, status, onStatusChange, rentMonthly, onRentChange }: {
+  business: BusinessCategory | null;
+  subCategory: BusinessSubCategory | null;
+  status: PlaceStatus;
+  onStatusChange: (p: PlaceStatus) => void;
+  rentMonthly: number;
+  onRentChange: (r: number) => void;
+}) {
+  const needs = subCategory?.placeType ?? "shop";
+
+  return (
+    <div className="animate-fade-in">
+      <div className="text-center mb-8">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
+          <Building2 className="h-6 w-6" />
+        </div>
+        <h2 className="text-2xl sm:text-3xl font-bold">Do you already have the place for this business?</h2>
+        <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+          {business && subCategory ? (
+            <><span className="font-semibold text-foreground">{subCategory.icon} {subCategory.name}</span> typically needs {PLACE_TYPE_LABEL[needs]}. This directly changes the setup cost — if you own it, we won't add a purchase cost.</>
+          ) : (
+            "Your answer changes how we estimate the setup cost — if you own it, we don't add a purchase cost."
+          )}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        {PLACE_STATUS_OPTIONS.map((opt) => (
+          <button key={opt.value} onClick={() => onStatusChange(opt.value)}
+            className={cn(
+              "flex items-start gap-3 rounded-xl border p-4 text-left transition-all",
+              status === opt.value
+                ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20"
+                : "border-border bg-white hover:border-primary/40 hover:shadow-md",
+            )}>
+            <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg flex-shrink-0",
+              status === opt.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+            )}>
+              {PLACE_ICONS[opt.value]}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-foreground">{opt.label}</p>
+                {status === opt.value && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{opt.hint}</p>
+              <p className="text-[10px] text-primary/70 mt-0.5">{opt.labelHi}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {status === "rent" && (
+        <div className="rounded-xl border border-border bg-[#F4F8EF] p-4 animate-fade-in">
+          <p className="text-sm font-semibold text-foreground mb-2">Expected monthly rent (₹)?</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            If unsure, we'll use a typical estimate for {PLACE_TYPE_LABEL[needs]} in a rural market.
+          </p>
+          <input
+            type="number"
+            min={0}
+            value={rentMonthly || ""}
+            onChange={(e) => onRentChange(Math.max(0, Number(e.target.value) || 0))}
+            placeholder="e.g. 4000"
+            className="w-full sm:w-64 rounded-xl border border-border bg-white px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Step 4: Capital with dynamic financing preview ─── */
+function CapitalStep({ value, business, subCategory, placeStatus, rentMonthly, scaleChoice, onChange, error }: {
   value: number; business: BusinessCategory | null;
+  subCategory: BusinessSubCategory | null; placeStatus: PlaceStatus;
+  rentMonthly: number; scaleChoice: ScaleChoice;
   onChange: (v: number) => void; error: string;
 }) {
   const showPreview = value > 0;
@@ -839,18 +1075,20 @@ function CapitalStep({ value, business, onChange, error }: {
     if (!showPreview) return null;
     const bid = business?.id ?? "other";
     const range = startupCostRange(bid);
-    const pc = calculateProjectCost(value, bid);
+    const options = { subCategoryId: subCategory?.id ?? null, placeStatus, rentMonthly, scaleChoice };
+    const pc = calculateProjectCost(value, bid, options);
     const projectCost = pc.totalProjectCost;
     const fundingGap = Math.max(0, projectCost - value);
-    const loan = calculateLoan(value, bid);
+    const loan = calculateLoan(value, bid, options);
     return {
       range,
       projectCost,
       fundingGap,
       financing: loan ? loan.loanAmount : 0,
       noFinancingNeeded: fundingGap <= 0,
+      options,
     };
-  }, [value, business, showPreview]);
+  }, [value, business, subCategory, placeStatus, rentMonthly, scaleChoice, showPreview]);
 
   return (
     <div className="animate-fade-in">
@@ -887,9 +1125,9 @@ function CapitalStep({ value, business, onChange, error }: {
           <p className="text-sm text-muted-foreground">
             💡 {business ? (
               <>
-                Based on your <span className="font-semibold text-foreground">{business.icon} {business.name}</span> selection, a typical setup for this business is estimated between{" "}
-                <span className="font-semibold text-foreground">{formatIndianCurrency(estimate.range.min)}</span> and{" "}
-                <span className="font-semibold text-foreground">{formatIndianCurrency(estimate.range.max)}</span>.
+                For <span className="font-semibold text-foreground">{business.icon} {business.name}</span>
+                {subCategory ? <> — <span className="font-semibold text-foreground">{subCategory.name}</span></> : null}, with a <span className="font-semibold text-foreground">{PLACE_LABELS[placeStatus]}</span> arrangement, the estimated setup requirement is{" "}
+                <span className="font-semibold text-foreground">{formatIndianCurrency(estimate.projectCost)}</span> at the <span className="font-semibold text-foreground">{SCALE_OPTIONS.find((s) => s.value === scaleChoice)?.label}</span>.
               </>
             ) : (
               "Based on a typical small-business setup:"
@@ -897,10 +1135,10 @@ function CapitalStep({ value, business, onChange, error }: {
           </p>
 
           <div className="rounded-lg border border-border/60 bg-white divide-y divide-border/60 overflow-hidden text-sm">
-            <PreviewRow label="Estimated project cost" value={formatIndianCurrency(estimate.projectCost)} note="typical setup estimate" />
+            <PreviewRow label="Estimated setup requirement" value={formatIndianCurrency(estimate.projectCost)} note="business type + place + scale" />
             <PreviewRow label="Your contribution" value={formatIndianCurrency(value)} />
             {estimate.noFinancingNeeded ? (
-              <PreviewRow label="External financing needed" value="None estimated" note="your contribution covers a typical setup" highlight />
+              <PreviewRow label="External financing needed" value="None estimated" note="your contribution covers this setup" highlight />
             ) : (
               <PreviewRow
                 label="Estimated funding requirement"
@@ -913,12 +1151,13 @@ function CapitalStep({ value, business, onChange, error }: {
 
           <details className="rounded-lg border border-border/60 bg-white/70 px-3 py-2 text-xs">
             <summary className="cursor-pointer select-none font-semibold text-primary">
-              How did RuralBiz estimate this?
+              How did GramUdaan estimate this?
             </summary>
             <ul className="mt-2 space-y-1 text-muted-foreground list-none">
-              <li>• The selected business type and its typical setup requirements</li>
-              <li>• Typical rural micro-enterprise cost ranges (setup + initial working capital)</li>
-              <li>• Your available contribution against that typical setup</li>
+              <li>• The selected business type ({business?.name}{subCategory ? ` — ${subCategory.name}` : ""}) and its typical setup requirements</li>
+              <li>• Your place arrangement: {PLACE_LABELS[placeStatus]}{placeStatus === "rent" && rentMonthly > 0 ? ` (₹${rentMonthly.toLocaleString("en-IN")}/month rent)` : ""} — owned place means no purchase cost</li>
+              <li>• The chosen scale: {SCALE_OPTIONS.find((s) => s.value === scaleChoice)?.label}</li>
+              <li>• Your available contribution against that setup</li>
             </ul>
             <p className="mt-2 text-[11px] text-muted-foreground/80">
               These are preliminary estimates for decision support. Actual costs and financing depend on local prices, business scale, lender requirements and applicable schemes.
@@ -952,10 +1191,11 @@ function PreviewRow({ label, value, note, highlight }: {
   );
 }
 
-/* ─── Step 4: Review ─── */
-function ReviewStep({ location, radius, business, capital, onEditLocation, onEditBusiness, onEditCapital }: {
+/* ─── Step 5: Review ─── */
+function ReviewStep({ location, radius, business, capital, subCategory, placeStatus, rentMonthly, scaleChoice, onEditLocation, onEditBusiness, onEditType, onEditPlace, onEditCapital }: {
   location: Location | null; radius: number; business: BusinessCategory | null;
-  capital: number; onEditLocation: () => void; onEditBusiness: () => void; onEditCapital: () => void;
+  capital: number; subCategory: BusinessSubCategory | null; placeStatus: PlaceStatus; rentMonthly: number; scaleChoice: ScaleChoice;
+  onEditLocation: () => void; onEditBusiness: () => void; onEditType: () => void; onEditPlace: () => void; onEditCapital: () => void;
 }) {
   return (
     <div className="animate-fade-in">
@@ -973,6 +1213,15 @@ function ReviewStep({ location, radius, business, capital, onEditLocation, onEdi
         <ReviewRow icon={<Store className="h-4 w-4" />} label="Business"
           value={business ? `${business.icon} ${business.name}` : "Not selected"}
           sub={business?.description} onEdit={onEditBusiness} />
+        <ReviewRow icon={<SlidersHorizontal className="h-4 w-4" />} label="Business Type"
+          value={subCategory ? `${subCategory.icon} ${subCategory.name}` : "Not selected"}
+          sub={subCategory?.description} onEdit={onEditType} />
+        <ReviewRow icon={<Building2 className="h-4 w-4" />} label="Place / Workspace"
+          value={PLACE_LABELS[placeStatus]}
+          sub={placeStatus === "rent" && subCategory ? `Monthly rent: ${formatIndianCurrency(rentMonthly || 0)}` : undefined} onEdit={onEditPlace} />
+        <ReviewRow icon={<TrendingUp className="h-4 w-4" />} label="Scale"
+          value={SCALE_OPTIONS.find((s) => s.value === scaleChoice)?.label || "Recommended"}
+          sub={SCALE_OPTIONS.find((s) => s.value === scaleChoice)?.hint} onEdit={onEditType} />
         <ReviewRow icon={<IndianRupee className="h-4 w-4" />} label="Your Contribution"
           value={capital > 0 ? formatIndianCurrency(capital) : "Not entered"}
           sub="Amount you can contribute from savings" onEdit={onEditCapital} />
@@ -1007,11 +1256,11 @@ function AnalysisLoader({ businessName, locationName }: { businessName: string; 
 
   const steps = [
     `Understanding your location (${locationName})`,
-    "Analyzing local market reach",
-    "Studying existing competition",
-    "Evaluating business opportunity",
-    "Calculating financial feasibility",
-    "Preparing your recommendation",
+    "Checking your business setup & place",
+    "Estimating setup cost and capital use",
+    "Calculating revenue, expenses and profit",
+    "Projecting profit timeline & break-even",
+    "Assessing risk, alternatives & recommendation",
   ];
 
   useEffect(() => {

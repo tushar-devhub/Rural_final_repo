@@ -10,6 +10,7 @@ import { Footer } from "@/components/Footer";
 import { useCountUp } from "@/hooks/useCountUp";
 import SchemesSection from "@/components/SchemesSection";
 import HyperlocalIntelligence from "@/components/HyperlocalIntelligence";
+import GramUdaanInsights from "@/components/GramUdaanInsights";
 import { useInView } from "@/hooks/useInView";
 import {
   Users, Lightbulb, ShieldCheck, AlertTriangle, Target,
@@ -122,6 +123,9 @@ export default function Dashboard() {
 
           {/* ── Financial Overview ── */}
           <FinancialOverviewSection f={f} />
+
+          {/* ── GramUdaan: cost breakdown, capital & scale, profit timeline, alternatives ── */}
+          <GramUdaanInsights f={f} />
 
           {/* ── Government Schemes & Financing ── */}
           <SchemesSection />

@@ -1,5 +1,9 @@
 import { analyzeMarketReach, analyzeOpportunity, generateSWOT, identifyRisks, mapCompetitors, analyzePricing, calculateSubScores } from "@/engine/market";
 import { calculateProjectCost, calculateRepayment, calculateLoan, calculateAffordability } from "@/engine/financial";
+import type { CostContext } from "@/engine/costModel";
+import { buildCostBreakdown } from "@/engine/costModel";
+import { buildBusinessModel } from "@/engine/businessModel";
+import { rankAlternativeBusinesses } from "@/engine/alternatives";
 import type { FeasibilityData } from "./feasibility-types";
 import { locations } from "./locations";
 
@@ -10,6 +14,7 @@ export function generateFeasibility(
   capital: number,
   locationId: string,
   radiusKm = 5,
+  options?: CostContext,
 ): FeasibilityData {
   // Get location data
   const location = locations.find((l) => l.id === locationId) || locations[0];
@@ -29,13 +34,18 @@ export function generateFeasibility(
   const pricing = analyzePricing(businessId, locationId);
 
   // ─── Financial Engine (business-context aware — no universal multiplier) ───
-  const projectCost = calculateProjectCost(capital, businessId);
-  const rawLoan = calculateLoan(capital, businessId);
+  const projectCost = calculateProjectCost(capital, businessId, options);
+  const rawLoan = calculateLoan(capital, businessId, options);
   // Financing is only presented when there is a real gap between the estimated
   // project cost and the user's own contribution.
   const fundingGap = Math.max(0, projectCost.totalProjectCost - capital);
   const loanInfo = rawLoan && rawLoan.loanAmount > 0 && fundingGap > 0 ? rawLoan : null;
-  const affordability = calculateAffordability(capital, businessId, locationId);
+  const affordability = calculateAffordability(capital, businessId, locationId, options);
+
+  // ─── GramUdaan: transparent cost breakdown, operating/profit model, alternatives ───
+  const costBreakdown = buildCostBreakdown(businessId, options);
+  const profitModel = buildBusinessModel(businessId, capital, options);
+  const alternatives = rankAlternativeBusinesses(businessId, capital, location, radiusKm);
 
   // ─── Sub-Scores ───
   const subScores = calculateSubScores(
@@ -238,5 +248,53 @@ export function generateFeasibility(
       "Visit the District Industries Centre (DIC) for scheme eligibility",
       "Prepare documentation for loan application",
     ],
+
+    costBreakdown: {
+      components: costBreakdown.components.map((c) => ({
+        id: c.id,
+        label: c.label,
+        labelHi: c.labelHi,
+        amount: c.amount,
+        source: c.source,
+      })),
+      total: costBreakdown.total,
+      monthlyRentEstimate: costBreakdown.monthlyRentEstimate,
+      notes: costBreakdown.notes,
+    },
+
+    profitModel: {
+      subCategoryName: profitModel.subCategoryName,
+      placeStatus: profitModel.placeStatus,
+      monthlyRevenue: profitModel.monthlyRevenue,
+      monthlyFixedCosts: profitModel.monthlyFixedCosts,
+      monthlyVariableCosts: profitModel.monthlyVariableCosts,
+      monthlyExpenses: profitModel.monthlyExpenses,
+      monthlyProfit: profitModel.monthlyProfit,
+      profitMargin: profitModel.profitMargin,
+      timeline: profitModel.timeline,
+      breakEvenMonth: profitModel.breakEvenMonth,
+      breakEvenSales: profitModel.breakEvenSales,
+      scales: profitModel.scales,
+      capital: profitModel.capital,
+      risk: profitModel.risk,
+      assumptions: profitModel.assumptions,
+    },
+
+    alternatives: alternatives.map((a) => ({
+      businessId: a.business.id,
+      businessName: a.business.name,
+      icon: a.business.icon,
+      subCategoryName: a.subCategoryName,
+      requiredInvestment: a.requiredInvestment,
+      fundingGap: a.fundingGap,
+      monthlyRevenue: a.monthlyRevenue,
+      monthlyProfit: a.monthlyProfit,
+      margin: a.margin,
+      risk: a.risk,
+      breakEvenMonth: a.breakEvenMonth,
+      feasibilityScore: a.feasibilityScore,
+      fitScore: a.fitScore,
+      reasons: a.reasons,
+    })),
   };
 }
